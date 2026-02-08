@@ -1116,9 +1116,69 @@ select.input {
 }
 
 .mail-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: auto auto auto auto;
+  gap: 10px 14px;
+  align-items: center;
+  justify-content: end;
+}
+
+.mail-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(226, 232, 240, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  font-size: 11px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.mail-badge {
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mail-badge.draft {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.mail-badge.final {
+  background: #4f46e5;
+  color: white;
+}
+
+.mail-hint {
+  color: #475569;
+  font-weight: 600;
+}
+
+.dark-mode .mail-status {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: #1f2937;
+  color: #e2e8f0;
+}
+
+.dark-mode .mail-badge.draft {
+  background: rgba(148, 163, 184, 0.2);
+  color: #cbd5f5;
+}
+
+.dark-mode .mail-hint {
+  color: #94a3b8;
+}
+
+@media (max-width: 900px) {
+  .mail-actions {
+    grid-template-columns: auto auto;
+    justify-content: start;
+  }
 }
 
 .mail-note {

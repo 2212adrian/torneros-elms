@@ -809,7 +809,15 @@ function renderMailEditor() {
         </div>
       </div>
       <div class="mail-actions">
+        <div class="mail-status">
+          <span class="mail-badge draft">Draft</span>
+          <span class="mail-hint">Saved for editing only.</span>
+        </div>
         <button class="btn ghost" id="mail-save-draft">Save Draft</button>
+        <div class="mail-status">
+          <span class="mail-badge final">Final</span>
+          <span class="mail-hint">Used for sending emails.</span>
+        </div>
         <button class="btn primary" id="mail-save-final">Save Final</button>
       </div>
     </div>

@@ -6,6 +6,7 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER;
+const PORTAL_LINK = process.env.PORTAL_LINK || "";
 const TOKEN_MODE_DEFAULT = process.env.TOKEN_MODE || "reuse";
 
 function generateToken() {
@@ -41,7 +42,7 @@ exports.handler = async (event) => {
     let query = supabase
       .schema("torneros-elms")
       .from("students")
-      .select("student_id, full_name, email")
+      .select("student_id, full_name, email, course")
       .is("deleted_at", null);
     if (tokenMode === "selected" && requestedIds.length > 0) {
       query = query.in("student_id", requestedIds);
@@ -83,6 +84,39 @@ exports.handler = async (event) => {
       .upsert(payload, { onConflict: "student_id" });
     if (upsertErr) throw upsertErr;
 
+    const { data: templates, error: tplErr } = await supabase
+      .schema("torneros-elms")
+      .from("mail_templates")
+      .select("title, body_html, status, updated_at")
+      .eq("status", "final")
+      .order("updated_at", { ascending: false })
+      .limit(1);
+    if (tplErr) throw tplErr;
+
+    const template = templates && templates[0];
+    const defaultSubject = "Your ELMS Access Token";
+    const defaultHtml =
+      "<p>Hello {Student_Name},</p><p>Your access token is: <strong>{Session_Token}</strong></p><p>Use this to view your grades.</p>";
+
+    const studentNames = students.map((s) => s.full_name).filter(Boolean);
+    let subjectRows = [];
+    if (studentNames.length) {
+      const { data: subjData, error: subjErr } = await supabase
+        .schema("torneros-elms")
+        .from("subjects")
+        .select("student_name, year_level, semester, updated_at")
+        .in("student_name", studentNames)
+        .order("updated_at", { ascending: false });
+      if (subjErr) throw subjErr;
+      subjectRows = subjData || [];
+    }
+    const subjectMap = new Map();
+    subjectRows.forEach((row) => {
+      if (!subjectMap.has(row.student_name)) {
+        subjectMap.set(row.student_name, row);
+      }
+    });
+
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: { user: SMTP_USER, pass: SMTP_PASS },
@@ -93,11 +127,45 @@ exports.handler = async (event) => {
       if (!s.email) continue;
       const token = payload.find((p) => p.student_id === s.student_id)?.token;
       if (!token) continue;
+      const when = new Date();
+      const dateStr = when.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+      const timeStr = when.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+      });
+      const subjectInfo = subjectMap.get(s.full_name) || {};
+      const replacements = {
+        "{Session_Token}": token,
+        "{Date}": dateStr,
+        "{Time}": timeStr,
+        "{Student_Name}": s.full_name || "Student",
+        "{Course}": s.course || "",
+        "{Student_ID}": s.student_id || "",
+        "{Email}": s.email || "",
+        "{Year_Level}": subjectInfo.year_level || "",
+        "{Semester}": subjectInfo.semester || "",
+        "{Portal_Link}": PORTAL_LINK,
+      };
+      const applyTemplate = (input) => {
+        let out = input || "";
+        Object.entries(replacements).forEach(([key, value]) => {
+          out = out.split(key).join(String(value));
+        });
+        return out;
+      };
+      const subject = applyTemplate(template?.title || defaultSubject);
+      const html = applyTemplate(template?.body_html || defaultHtml);
+      const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       await transporter.sendMail({
         from: SMTP_FROM,
         to: s.email,
-        subject: "Your ELMS Access Token",
-        text: `Hello ${s.full_name || "Student"},\n\nYour access token is:\n${token}\n\nUse this to view your grades.\n`,
+        subject,
+        text,
+        html,
       });
       sent += 1;
     }
