@@ -31,6 +31,7 @@ let tokens = [];
 const masterlistState = { page: 1, pageSize: 10, query: "" };
 const gradingState = { page: 1, pageSize: 10, query: "", yearLevel: "", semester: "" };
 const fetchDebug = { students: { fetched: 0, visible: 0 } };
+let tokenMode = "selected";
 
 const sections = ["BSIT-3B", "BSIT-3A", "BSCS-2A"];
 const subjects = [
@@ -84,6 +85,36 @@ function randomUUID() {
   return "xxxx-xxxx-xxxx-xxxx".replace(/[x]/g, () =>
     Math.floor(Math.random() * 16).toString(16)
   );
+}
+
+function normalizeDate(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  if (typeof value === "number") {
+    const base = Date.UTC(1899, 11, 30);
+    const ms = base + value * 86400000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  const text = String(value).trim();
+  if (!text) return null;
+  if (/^\d+$/.test(text)) {
+    const serial = Number(text);
+    if (!Number.isNaN(serial)) {
+      const base = Date.UTC(1899, 11, 30);
+      const ms = base + serial * 86400000;
+      return new Date(ms).toISOString().slice(0, 10);
+    }
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const slash = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slash) {
+    const mm = slash[1].padStart(2, "0");
+    const dd = slash[2].padStart(2, "0");
+    return `${slash[3]}-${mm}-${dd}`;
+  }
+  return text;
 }
 
 function generateToken() {
@@ -582,6 +613,7 @@ function renderTokens() {
   const available = students.filter(
     (s) => !tokens.some((t) => t.studentIdCode === s.idCode)
   );
+  const showSelected = tokenMode !== "all";
   return `
     <section class="section">
       <h2>Access Key Distribution</h2>
@@ -591,20 +623,26 @@ function renderTokens() {
       <div class="card">
         <h3>Issue Keys</h3>
         <p style="color:var(--muted);">Select students below then publish.</p>
-        <div id="token-student-list" style="margin-top:16px;max-height:300px;overflow:auto;">
-          ${available
-            .map(
-              (s) => `
-              <label style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-                <input type="checkbox" value="${s.idCode}" />
-                <span>${s.fullName} (${s.idCode})</span>
-              </label>
-            `
-            )
-            .join("")}
+        <div style="display:flex;gap:10px;margin-top:12px;">
+          <button class="btn ${showSelected ? "primary" : "ghost"}" id="mode-selected">Publish Selected</button>
+          <button class="btn ${!showSelected ? "primary" : "ghost"}" id="mode-all">Publish All</button>
         </div>
-        <button class="btn primary" id="publish-selected" style="margin-top:12px;">Publish Selected</button>
-        <button class="btn ghost" id="publish-all" style="margin-top:8px;">Publish All</button>
+        ${showSelected ? `
+          <input id="token-search" class="input" placeholder="Search student..." style="margin-top:12px;" />
+          <div id="token-student-list" class="token-list">
+            ${available
+              .slice(0, 15)
+              .map(
+                (s) => `
+                <label style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                  <input type="checkbox" value="${s.idCode}" />
+                  <span>${s.fullName} (${s.idCode})</span>
+                </label>
+              `
+              )
+              .join("")}
+          </div>
+        ` : ""}
         <div style="height:12px;"></div>
         <button class="btn indigo" id="send-tokens" style="margin-top:6px;">Send Tokens to All Emails</button>
       </div>
@@ -761,12 +799,21 @@ function bindMasterlistActions() {
 
   function getFilteredStudents() {
     const q = masterlistState.query.toLowerCase();
-    return students.filter(
-      (s) =>
-        (s.fullName || "").toLowerCase().includes(q) ||
-        (s.course || "").toLowerCase().includes(q) ||
-        (s.idCode || "").includes(q)
-    );
+    if (!q) return students;
+    return students.filter((s) => {
+      const hay = [
+        s.idCode,
+        s.fullName,
+        s.course,
+        s.gender,
+        s.email,
+        s.contactNumber,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
   }
 
   function paginate(list, page, pageSize) {
@@ -809,11 +856,14 @@ function bindMasterlistActions() {
     nextBtn.disabled = page >= totalPages;
   }
 
-  search.addEventListener("input", () => {
+  const onSearch = () => {
     masterlistState.query = search.value.trim();
     masterlistState.page = 1;
     renderStudentRows();
-  });
+  };
+  search.addEventListener("input", onSearch);
+  search.addEventListener("change", onSearch);
+  search.addEventListener("keyup", onSearch);
 
   prevBtn.addEventListener("click", () => {
     masterlistState.page -= 1;
@@ -967,40 +1017,50 @@ function bindGradeActions() {
 }
 
 function bindTokenActions() {
-  document.getElementById("publish-selected").onclick = () => {
-    const selected = Array.from(
-      document.querySelectorAll("#token-student-list input:checked")
-    ).map((el) => el.value);
-    if (selected.length === 0) return;
-    const now = new Date().toISOString();
-    const newTokens = selected.map((idCode) => ({
-      id: randomUUID(),
-      token: generateToken(),
-      studentIdCode: idCode,
-      description: "Student Key",
-      createdAt: now,
-    }));
-    tokens = [...newTokens, ...tokens];
-    saveLocalTokens();
-    renderView("tokens");
-  };
+  const search = document.getElementById("token-search");
+  const list = document.getElementById("token-student-list");
+  const modeSelected = document.getElementById("mode-selected");
+  const modeAll = document.getElementById("mode-all");
 
-  document.getElementById("publish-all").onclick = () => {
+  if (modeSelected) {
+    modeSelected.onclick = () => {
+      tokenMode = "selected";
+      renderView("tokens");
+    };
+  }
+  if (modeAll) {
+    modeAll.onclick = () => {
+      tokenMode = "all";
+      renderView("tokens");
+    };
+  }
+
+  const renderTokenList = (query = "") => {
+    if (!list) return;
+    const q = query.trim().toLowerCase();
     const available = students.filter(
-      (s) => !tokens.some((t) => t.studentIdCode === s.idCode)
+      (s) =>
+        !tokens.some((t) => t.studentIdCode === s.idCode) &&
+        ([s.fullName, s.idCode].filter(Boolean).join(" ").toLowerCase().includes(q))
     );
-    const now = new Date().toISOString();
-    const newTokens = available.map((s) => ({
-      id: randomUUID(),
-      token: generateToken(),
-      studentIdCode: s.idCode,
-      description: "Student Key",
-      createdAt: now,
-    }));
-    tokens = [...newTokens, ...tokens];
-    saveLocalTokens();
-    renderView("tokens");
+    if (!available.length) {
+      list.innerHTML = `<div style="color:var(--muted);font-size:12px;">No matches.</div>`;
+      return;
+    }
+    list.innerHTML = available
+      .slice(0, 15)
+      .map(
+        (s) => `
+          <label style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <input type="checkbox" value="${s.idCode}" />
+            <span>${s.fullName} (${s.idCode})</span>
+          </label>
+        `
+      )
+      .join("");
   };
+  window._renderTokenList = renderTokenList;
+
 
   const sendBtn = document.getElementById("send-tokens");
   if (sendBtn) {
@@ -1017,10 +1077,27 @@ function bindTokenActions() {
       sendBtn.disabled = true;
       sendBtn.textContent = "Sending...";
       try {
+        const selectedIds =
+          tokenMode === "selected"
+            ? Array.from(
+                document.querySelectorAll("#token-student-list input:checked")
+              ).map((el) => el.value)
+            : [];
+        if (tokenMode === "selected" && selectedIds.length === 0) {
+          Swal.fire({
+            icon: "warning",
+            title: "No students selected",
+            text: "Select at least one student before sending.",
+          });
+          return;
+        }
         const resp = await fetch("/.netlify/functions/send-tokens", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode: "reuse" }),
+          body: JSON.stringify({
+            mode: tokenMode,
+            student_ids: selectedIds,
+          }),
         });
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) throw new Error(data?.error || "Send failed");
@@ -1339,6 +1416,14 @@ function openImportCenter() {
       });
     }
   };
+
+  if (search && list) {
+    const onSearch = () => renderTokenList(search.value);
+    search.addEventListener("input", onSearch);
+    search.addEventListener("change", onSearch);
+    search.addEventListener("keyup", onSearch);
+    renderTokenList();
+  }
 }
 
 function openImportModal(type) {
@@ -1445,6 +1530,13 @@ function bindMainEvents() {
   });
 
   logoutBtn.addEventListener("click", logout);
+
+  document.addEventListener("input", (e) => {
+    const target = e.target;
+    if (target && target.id === "token-search" && typeof window._renderTokenList === "function") {
+      window._renderTokenList(target.value);
+    }
+  });
 }
 
 async function init() {
@@ -1735,7 +1827,7 @@ async function importStudentsFromText(data) {
         idCode: (idCode || "").trim() || (Math.floor(100000 + Math.random() * 900000)).toString(),
         fullName: (name || "").trim(),
         gender: gender || null,
-        birthdate: dob || null,
+        birthdate: normalizeDate(dob),
         course: course || null,
         age,
         contactNumber: contact,
@@ -1792,7 +1884,7 @@ async function importStudentsFromRows(rows) {
         (Math.floor(100000 + Math.random() * 900000)).toString(),
       fullName: (r.full_name || "").trim(),
       gender: r.gender || null,
-      birthdate: r.birthdate || null,
+      birthdate: normalizeDate(r.birthdate),
       course: r.course || null,
       age: r.age || null,
       contactNumber: r.contact_number || null,

@@ -26,6 +26,7 @@ exports.handler = async (event) => {
   try {
     const body = event.body ? JSON.parse(event.body) : {};
     const mode = body.mode || TOKEN_MODE_DEFAULT;
+    const requestedIds = Array.isArray(body.student_ids) ? body.student_ids : [];
     const tokenMode = mode === "both" ? "reuse" : mode;
 
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
@@ -37,11 +38,15 @@ exports.handler = async (event) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-    const { data: students, error } = await supabase
+    let query = supabase
       .schema("torneros-elms")
       .from("students")
       .select("student_id, full_name, email")
       .is("deleted_at", null);
+    if (tokenMode === "selected" && requestedIds.length > 0) {
+      query = query.in("student_id", requestedIds);
+    }
+    const { data: students, error } = await query;
     if (error) throw error;
     if (!students || students.length === 0) {
       return {
