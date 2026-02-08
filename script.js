@@ -802,8 +802,11 @@ function renderMailEditor() {
         <label style="font-size:12px;font-weight:700;color:var(--muted);">Title</label>
         <input id="mail-title" class="input" placeholder="Access Token Delivery" />
       </div>
-      <div class="quill-shell">
-        <div id="mail-editor"></div>
+      <div class="section">
+        <label style="font-size:12px;font-weight:700;color:var(--muted);">Content</label>
+        <div class="quill-shell">
+          <div id="mail-editor"></div>
+        </div>
       </div>
       <div class="mail-actions">
         <button class="btn ghost" id="mail-save-draft">Save Draft</button>
@@ -811,6 +814,29 @@ function renderMailEditor() {
       </div>
     </div>
   `;
+}
+
+async function fetchMailTemplates() {
+  const { data, error } = await supabaseClient
+    .schema(DB_SCHEMA)
+    .from("mail_templates")
+    .select("title, body_html, status, updated_at");
+  if (error) {
+    console.error("fetchMailTemplates error", error);
+    return [];
+  }
+  return data || [];
+}
+
+async function upsertMailTemplate(payload) {
+  const { error } = await supabaseClient
+    .schema(DB_SCHEMA)
+    .from("mail_templates")
+    .upsert(payload, { onConflict: "status" });
+  if (error) {
+    console.error("upsertMailTemplate error", error);
+    throw error;
+  }
 }
 
 function renderGuestPortal() {
@@ -1846,6 +1872,20 @@ function initMailEditor() {
     });
   }
 
+  const loadFromDb = async () => {
+    const rows = await fetchMailTemplates();
+    const draftRow = rows.find((r) => r.status === "draft");
+    const finalRow = rows.find((r) => r.status === "final");
+    const pick = finalRow || draftRow;
+    if (!pick) return;
+    if (title && pick.title) title.value = pick.title;
+    if (pick.body_html && mailEditor.root.innerHTML.trim() === "<p><br></p>") {
+      mailEditor.root.innerHTML = pick.body_html;
+    }
+  };
+
+  loadFromDb();
+
   if (draft.html && mailEditor.root.innerHTML.trim() === "<p><br></p>") {
     mailEditor.root.innerHTML = draft.html;
   }
@@ -1872,17 +1912,13 @@ function initMailEditor() {
     if (!title || !mailEditor) return;
     applyCooldown(status === "draft" ? draftBtn : finalBtn, 1000);
     const payload = {
+      status,
       title: title.value.trim() || "Untitled",
       body_html: mailEditor.root.innerHTML || "",
-      status,
       updated_at: new Date().toISOString(),
     };
     try {
-      const { error } = await supabaseClient
-        .schema(DB_SCHEMA)
-        .from("mail_templates")
-        .insert(payload);
-      if (error) throw error;
+      await upsertMailTemplate(payload);
       showToast("success", status === "draft" ? "Draft saved." : "Final saved.");
     } catch (err) {
       console.error("mail save failed", err);
