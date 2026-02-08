@@ -6,7 +6,7 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER;
-const PORTAL_LINK = process.env.PORTAL_LINK || "";
+const PORTAL_LINK = "https://torneros.netlify.app/";
 const TOKEN_MODE_DEFAULT = process.env.TOKEN_MODE || "reuse";
 
 function generateToken() {

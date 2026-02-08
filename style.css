@@ -12,6 +12,12 @@
   --shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.35);
   --radius-xl: 24px;
   --radius-xxl: 32px;
+  --tab-bg: #f4f8ff;
+  --tab-header: #e6f0ff;
+  --tab-border: #bfd6ff;
+  --tab-row-even: #f7fbff;
+  --tab-row-hover: #dbeafe;
+  --tab-text: #0f172a;
 }
 
 * {
@@ -27,10 +33,15 @@
 
 body {
   margin: 0;
-  font-family: "Space Grotesk", system-ui, sans-serif;
-  background: radial-gradient(1200px 600px at 10% -10%, #dbeafe 0%, transparent 45%),
+  font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #dbeafe 0%, transparent 45%),
     radial-gradient(900px 500px at 90% -20%, #e0e7ff 0%, transparent 50%),
+    url("textures/grid-me.png"),
     var(--bg);
+  background-repeat: no-repeat, no-repeat, repeat, no-repeat;
+  background-size: auto, auto, 80px, auto;
+  background-blend-mode: normal, normal, soft-light, normal;
   color: var(--ink);
   height: auto;
   overflow: visible;
@@ -54,6 +65,12 @@ body {
   --red: #f87171;
   --yellow: #fbbf24;
   --shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.9);
+  --tab-bg: #0b1730;
+  --tab-header: #0f1f3d;
+  --tab-border: #1f3a6b;
+  --tab-row-even: #0b1a34;
+  --tab-row-hover: #163b77;
+  --tab-text: #e2e8f0;
 }
 
 .dark-mode .topbar {
@@ -1106,6 +1123,32 @@ select.input {
   align-items: center;
 }
 
+.select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(248, 250, 252, 0.7);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.select-all input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #4f46e5;
+}
+
+.dark-mode .select-all {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: #1f2937;
+  color: #e2e8f0;
+}
+
 .token-item {
   display: grid;
   grid-template-columns: 20px 1fr;
@@ -1137,6 +1180,22 @@ select.input {
   overflow-wrap: anywhere;
 }
 
+.token-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+}
+
+.token-item input[type="checkbox"]:checked + .token-info {
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.token-item:has(input[type="checkbox"]:checked) {
+  border-color: rgba(59, 130, 246, 0.6);
+  background: rgba(59, 130, 246, 0.12);
+  box-shadow: 0 12px 22px -18px rgba(59, 130, 246, 0.65);
+}
+
 .token-card {
   padding: 14px;
   border-radius: 18px;
@@ -1145,8 +1204,57 @@ select.input {
   justify-content: space-between;
   gap: 12px;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid rgba(148, 163, 184, 0.25);
 }
 
+.token-card:has(input[type="checkbox"]:checked) {
+  border: 1px solid rgba(59, 130, 246, 0.6);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.token-card.bulk-mode .token-actions {
+  display: none;
+}
+
+.token-check {
+  display: inline-flex;
+  align-items: center;
+}
+
+.token-check input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  accent-color: #4f46e5;
+  border-radius: 6px;
+  box-shadow: 0 4px 10px -6px rgba(79, 70, 229, 0.6);
+}
+
+.token-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.token-actions .token-delete {
+  color: #b91c1c;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.bulk-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bulk-actions.hidden {
+  display: none;
+}
+
+.bulk-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
 .token-card:hover {
   transform: translateY(-1px);
   box-shadow: 0 12px 20px -18px rgba(59, 130, 246, 0.5);
@@ -1155,6 +1263,11 @@ select.input {
 .token-main {
   display: grid;
   gap: 4px;
+  flex: 1;
+}
+
+.token-actions {
+  margin-left: auto;
 }
 
 .token-value {
@@ -2062,9 +2175,58 @@ body.guest-only #login-screen {
   .preview-table {
     overflow-x: auto;
   }
-  .preview-table table {
-    table-layout: auto;
+.preview-table table {
+  table-layout: auto;
+}
+
+/* Handsontable (Masterlist + Grading) */
+.tabulator-wrap {
+  margin-top: 14px;
+}
+
+.hot-blue .handsontable {
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid var(--tab-border);
+  background: var(--tab-bg);
+  box-shadow: 0 18px 30px -24px rgba(15, 23, 42, 0.45);
+}
+
+.hot-blue .ht_master .htCore th,
+.hot-blue .ht_master .htCore td {
+  border-color: color-mix(in srgb, var(--tab-border) 50%, transparent);
+  color: var(--tab-text);
+}
+
+.hot-blue .ht_master thead th {
+  background: var(--tab-header);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 11px;
+}
+
+.hot-blue .ht_master tbody tr:nth-child(even) td {
+  background: var(--tab-row-even);
+}
+
+.hot-blue .ht_master tbody tr:hover td {
+  background: var(--tab-row-hover);
+}
+
+.hot-blue .htFiltersMenu {
+  font-family: "Plus Jakarta Sans", sans-serif;
+}
+
+@keyframes tabRowIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
   }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
   .switch-toggle {
     margin-right: 0;
   }
@@ -2096,9 +2258,16 @@ body.guest-only #login-screen {
   .guest-card .table {
     min-width: 480px;
   }
-  .guest-meta {
-    font-size: 11px;
-  }
+.guest-meta {
+  font-size: 11px;
+}
+
+.subtle-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
 }
 
 @media (min-width: 768px) {
@@ -2159,4 +2328,115 @@ body.guest-only #login-screen {
   .content {
     padding-right: 0;
   }
+}
+
+
+.tabulator-wrap {
+  margin-top: 14px;
+}
+
+.tabulator-blue .tabulator {
+  border: 1px solid var(--tab-border) !important;
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--tab-bg) !important;
+  box-shadow: 0 18px 30px -24px rgba(15, 23, 42, 0.45);
+  font-family: "Plus Jakarta Sans", sans-serif;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+}
+
+.tabulator-blue .tabulator .tabulator-header {
+  background: var(--tab-header) !important;
+  border-bottom: 1px solid var(--tab-border) !important;
+}
+
+.tabulator-blue .tabulator .tabulator-header .tabulator-col {
+  background: transparent !important;
+  border-right: 1px solid color-mix(in srgb, var(--tab-border) 70%, transparent) !important;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tab-text);
+}
+
+.tabulator-blue .tabulator .tabulator-row {
+  background: transparent !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--tab-border) 45%, transparent) !important;
+  animation: tabRowIn 0.35s ease;
+}
+
+.tabulator-blue .tabulator .tabulator-row.tabulator-row-even {
+  background: var(--tab-row-even) !important;
+}
+
+.tabulator-blue .tabulator .tabulator-row:hover {
+  background: var(--tab-row-hover) !important;
+}
+
+.tabulator-blue .tabulator .tabulator-cell {
+  padding: 10px 12px;
+  color: var(--tab-text);
+}
+
+.tabulator-blue .tabulator .tabulator-cell.tabulator-editing {
+  box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.45);
+}
+
+.tabulator-blue .tabulator .tabulator-footer {
+  display: block;
+  background: var(--tab-header) !important;
+  border-top: 1px solid var(--tab-border) !important;
+}
+
+.tabulator-blue .tabulator .tabulator-page {
+  border-radius: 10px;
+}
+
+.dark-mode .tabulator-blue .tabulator {
+  background: var(--tab-bg) !important;
+  border-color: var(--tab-border) !important;
+  box-shadow: 0 18px 30px -24px rgba(2, 6, 23, 0.7);
+}
+
+.dark-mode .tabulator-blue .tabulator .tabulator-header {
+  background: var(--tab-header) !important;
+  border-bottom-color: var(--tab-border) !important;
+}
+
+.dark-mode .tabulator-blue .tabulator .tabulator-row.tabulator-row-even {
+  background: var(--tab-row-even) !important;
+}
+
+.dark-mode .tabulator-blue .tabulator .tabulator-row:hover {
+  background: var(--tab-row-hover) !important;
+}
+
+.dark-mode .tabulator-blue .tabulator .tabulator-cell {
+  color: var(--tab-text);
+}
+
+.tabulator-blue .tabulator .tabulator-header .tabulator-header-filter input {
+  border-radius: 10px;
+  border: 1px solid var(--tab-border);
+  background: color-mix(in srgb, var(--tab-bg) 85%, white);
+  padding: 6px 8px;
+  font-family: inherit;
+}
+
+.dark-mode .tabulator-blue .tabulator .tabulator-header .tabulator-header-filter input {
+  background: color-mix(in srgb, var(--tab-bg) 85%, black);
+  border-color: var(--tab-border);
+  color: var(--tab-text);
+}
+
+.tabulator-blue .tabulator .tabulator-footer .tabulator-page {
+  background: color-mix(in srgb, var(--tab-bg) 85%, white);
+  border: 1px solid var(--tab-border);
+  padding: 4px 8px;
+}
+
+.dark-mode .tabulator-blue .tabulator .tabulator-footer .tabulator-page {
+  background: color-mix(in srgb, var(--tab-bg) 85%, black);
+  border-color: var(--tab-border);
+  color: var(--tab-text);
 }

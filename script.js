@@ -90,6 +90,12 @@ const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
 const DARK_MODE_KEY = "elms_dark_mode";
 
 function applyTheme(isDark) {
+  const tabLight = document.getElementById("tabulator-theme-light");
+  const tabDark = document.getElementById("tabulator-theme-dark");
+  if (tabLight && tabDark) {
+    tabLight.disabled = !!isDark;
+    tabDark.disabled = !isDark;
+  }
   if (isDark) {
     document.body.classList.add("dark-mode");
     localStorage.setItem(DARK_MODE_KEY, "dark");
@@ -572,6 +578,7 @@ function renderDashboard() {
     <section class="section">
       <h2>Welcome back, Professor</h2>
       <p>Here's what's happening in your system today.</p>
+      <p class="subtle-note">Editable: Full Name, Gender, Birthdate, Course, Contact, Email. Student ID and Age are locked.</p>
     </section>
     <div class="stat-grid section">
       ${statCard("Total Students", students.length)}
@@ -628,6 +635,7 @@ function renderMasterlist() {
       <p class="debug-pill">
         Debug: fetched ${fetchDebug.students.fetched} · visible ${fetchDebug.students.visible} · showing ${students.length}
       </p>
+      <p class="subtle-note">Editable: Full Name, Gender, Birthdate, Course, Contact, Email. Student ID and Age are locked.</p>
     </section>
     <div class="section card">
       <div class="grid-2">
@@ -635,30 +643,7 @@ function renderMasterlist() {
         <div style="display:flex;gap:10px;justify-content:flex-end;">
         </div>
       </div>
-      <div class="table-wrap">
-        <div class="table-scroll">
-          <table class="table">
-          <thead>
-            <tr>
-              <th>Student ID</th>
-              <th>Full Name</th>
-              <th>Gender</th>
-              <th>Birthdate</th>
-              <th>Age</th>
-              <th>Course</th>
-              <th>Contact #</th>
-              <th>Email</th>
-            </tr>
-          </thead>
-          <tbody id="student-rows"></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="pager" id="student-pager">
-        <button class="btn ghost" id="student-prev">Prev</button>
-        <span class="pager-info" id="student-page-info"></span>
-        <button class="btn ghost" id="student-next">Next</button>
-      </div>
+      <div id="masterlist-table" class="tabulator-wrap"></div>
     </div>
   `;
 }
@@ -667,9 +652,7 @@ function renderGrades() {
   const yearOptions = Array.from(
     new Set(subjectsData.map((s) => s.yearLevel).filter(Boolean))
   );
-  const semesterOptions = Array.from(
-    new Set(subjectsData.map((s) => s.semester).filter(Boolean))
-  );
+  const semesterOptions = ["First", "Second"];
   return `
     <section class="section">
       <h2>Grading Records</h2>
@@ -691,29 +674,7 @@ function renderGrades() {
         <div style="display:flex;gap:10px;justify-content:flex-end;">
         </div>
       </div>
-      <div class="table-wrap">
-        <div class="table-scroll">
-          <table class="table">
-          <thead>
-            <tr>
-              <th>subject_name</th>
-              <th>student_name</th>
-              <th>average</th>
-              <th>gwa</th>
-              <th>remarks</th>
-              <th>year_level</th>
-              <th>semester</th>
-            </tr>
-          </thead>
-          <tbody id="grade-rows"></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="pager" id="grade-pager">
-        <button class="btn ghost" id="grade-prev">Prev</button>
-        <span class="pager-info" id="grade-page-info"></span>
-        <button class="btn ghost" id="grade-next">Next</button>
-      </div>
+      <div id="grading-table" class="tabulator-wrap"></div>
     </div>
   `;
 }
@@ -755,7 +716,10 @@ function renderTokens() {
                   .map((sem) => `<option value="${sem}">${sem}</option>`)
                   .join("")}
               </select>
-              <button class="btn ghost" id="token-select-all">Select All (Visible)</button>
+              <label class="select-all">
+                <input type="checkbox" id="token-select-all" />
+                <span>Select all</span>
+              </label>
             </div>
             <div id="token-student-list" class="token-list"></div>
             <div class="pager" id="token-student-pager">
@@ -790,11 +754,22 @@ function renderTokens() {
                 .join("")}
             </select>
           </div>
+          <div class="token-toolbar">
+            <label class="select-all">
+              <input type="checkbox" id="active-select-all" />
+              <span>Select all</span>
+            </label>
+          </div>
           <div id="active-token-list" style="margin-top:12px;display:grid;gap:10px;"></div>
           <div class="pager" id="active-token-pager">
             <button class="btn ghost" id="active-token-prev">Prev</button>
             <span class="pager-info" id="active-token-page-info"></span>
             <button class="btn ghost" id="active-token-next">Next</button>
+            <div id="active-bulk-actions" class="bulk-actions hidden">
+              <span class="bulk-count">0 selected</span>
+              <button class="btn ghost" id="bulk-reroll-send">Reroll &amp; Send</button>
+              <button class="btn danger" id="bulk-delete">Delete</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1108,235 +1083,294 @@ function bindDashboardActions() {
 
 function bindMasterlistActions() {
   const search = document.getElementById("student-search");
-  const rows = document.getElementById("student-rows");
-  const prevBtn = document.getElementById("student-prev");
-  const nextBtn = document.getElementById("student-next");
-  const pageInfo = document.getElementById("student-page-info");
+  const tableEl = document.getElementById("masterlist-table");
+  if (!tableEl || typeof Tabulator !== "function") {
+    console.warn("Tabulator not loaded.");
+    return;
+  }
+  tableEl.classList.add("tabulator-blue");
 
-  function getFilteredStudents() {
-    const q = masterlistState.query.toLowerCase();
-    if (!q) return students;
-    return students.filter((s) => {
-      const hay = [
-        s.idCode,
-        s.fullName,
-        s.course,
-        s.gender,
-        s.email,
-        s.contactNumber,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
+  const toRow = (s) => ({
+    student_id: s.idCode || "",
+    full_name: s.fullName || "",
+    gender: s.gender || "",
+    birthdate: s.birthdate || "",
+    age: s.age || "",
+    course: s.course || "",
+    contact_number: s.contactNumber || "",
+    email: s.email || "",
+  });
+
+  const calcAge = (birthdate) => {
+    if (!birthdate) return "";
+    const date = new Date(birthdate);
+    if (Number.isNaN(date.getTime())) return "";
+    const today = new Date();
+    let age = today.getFullYear() - date.getFullYear();
+    const m = today.getMonth() - date.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < date.getDate())) age -= 1;
+    return age;
+  };
+
+  const pending = new Map();
+  const scheduleSave = (data) => {
+    const key = data.student_id;
+    if (!key) return;
+    if (pending.has(key)) clearTimeout(pending.get(key));
+    pending.set(
+      key,
+      setTimeout(async () => {
+        pending.delete(key);
+        try {
+          await upsertStudents([
+            {
+              idCode: data.student_id,
+              fullName: data.full_name,
+              gender: data.gender,
+              birthdate: data.birthdate || null,
+              age: data.age ? Number(data.age) : null,
+              course: data.course || null,
+              contactNumber: data.contact_number || null,
+              email: data.email || null,
+            },
+          ]);
+          showToast("success", "Student updated.");
+        } catch (err) {
+          console.error("student update failed", err);
+          showToast("error", "Update failed.");
+        }
+      }, 150)
+    );
+  };
+
+  const table = new Tabulator(tableEl, {
+    data: students.map(toRow),
+    layout: "fitColumns",
+    height: "520px",
+    pagination: "local",
+    paginationSize: 10,
+    movableColumns: false,
+    reactiveData: true,
+    columns: [
+      { title: "Student ID", field: "student_id", headerFilter: true, editor: false, width: 140 },
+      { title: "Full Name", field: "full_name", editor: "input" },
+      {
+        title: "Gender",
+        field: "gender",
+        editor: "list",
+        editorParams: { values: ["Male", "Female"], clearable: false },
+        width: 120,
+      },
+      {
+        title: "Birthdate",
+        field: "birthdate",
+        editor: "date",
+        editorParams: { format: "yyyy-MM-dd" },
+        width: 140,
+      },
+      { title: "Age", field: "age", editor: false, width: 80 },
+      { title: "Course", field: "course", editor: "input" },
+      { title: "Contact #", field: "contact_number", editor: "input" },
+      { title: "Email", field: "email", editor: "input" },
+    ],
+  });
+
+  table.on("cellEdited", (cell) => {
+    const row = cell.getRow();
+    const data = row.getData();
+    if (cell.getField() === "birthdate") {
+      const age = calcAge(data.birthdate);
+      row.update({ age });
+      data.age = age;
+    }
+    const idx = students.findIndex((s) => s.idCode === data.student_id);
+    if (idx >= 0) {
+      students[idx] = {
+        ...students[idx],
+        fullName: data.full_name,
+        gender: data.gender,
+        birthdate: data.birthdate,
+        age: data.age,
+        course: data.course,
+        contactNumber: data.contact_number,
+        email: data.email,
+      };
+    }
+    scheduleSave(data);
+  });
+
+
+
+  if (search) {
+    search.addEventListener("input", () => {
+      const q = search.value.trim().toLowerCase();
+      if (!q) {
+        table.clearFilter();
+        return;
+      }
+      table.setFilter((data) => {
+        const hay = [
+          data.student_id,
+          data.full_name,
+          data.gender,
+          data.course,
+          data.email,
+          data.contact_number,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
+      });
     });
   }
-
-  function paginate(list, page, pageSize) {
-    const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
-    const safePage = Math.min(Math.max(1, page), totalPages);
-    const start = (safePage - 1) * pageSize;
-    return {
-      items: list.slice(start, start + pageSize),
-      page: safePage,
-      totalPages,
-    };
-  }
-
-  function renderStudentRows() {
-    const filtered = getFilteredStudents();
-    const { items, page, totalPages } = paginate(
-      filtered,
-      masterlistState.page,
-      masterlistState.pageSize
-    );
-    masterlistState.page = page;
-    rows.innerHTML = items.length
-      ? items
-          .map(
-            (s) => `
-            <tr>
-              <td>${s.idCode || ""}</td>
-              <td>${s.fullName || ""}</td>
-              <td>${s.gender || ""}</td>
-              <td>${s.birthdate || ""}</td>
-              <td>${s.age || ""}</td>
-              <td>${s.course || ""}</td>
-              <td>${s.contactNumber || ""}</td>
-              <td>${s.email || ""}</td>
-            </tr>
-          `
-          )
-          .join("")
-      : emptyTableRow(8);
-    pageInfo.textContent = `Page ${page} of ${totalPages} · ${filtered.length} records`;
-    prevBtn.disabled = page <= 1;
-    nextBtn.disabled = page >= totalPages;
-  }
-
-  const onSearch = () => {
-    masterlistState.query = search.value.trim();
-    masterlistState.page = 1;
-    renderStudentRows();
-  };
-  search.addEventListener("input", onSearch);
-  search.addEventListener("change", onSearch);
-  search.addEventListener("keyup", onSearch);
-
-  prevBtn.addEventListener("click", () => {
-    masterlistState.page -= 1;
-    renderStudentRows();
-  });
-  nextBtn.addEventListener("click", () => {
-    masterlistState.page += 1;
-    renderStudentRows();
-  });
-  renderStudentRows();
-
 }
 
 function bindGradeActions() {
   const search = document.getElementById("grade-search");
-  const rows = document.getElementById("grade-rows");
   const yearFilter = document.getElementById("filter-year");
   const semesterFilter = document.getElementById("filter-semester");
-  const prevBtn = document.getElementById("grade-prev");
-  const nextBtn = document.getElementById("grade-next");
-  const pageInfo = document.getElementById("grade-page-info");
+  const tableEl = document.getElementById("grading-table");
+  if (!tableEl || typeof Tabulator !== "function") return;
+  tableEl.classList.add("tabulator-blue");
 
-  function spectralColor(value, min = 0, max = 100) {
-    const safe = Math.min(Math.max(value, min), max);
-    const ratio = (safe - min) / (max - min || 1);
-    const hue = 120 * ratio;
-    return `hsl(${hue}, 70%, 45%)`;
-  }
+  const toRow = (s) => ({
+    subject_name: s.subjectName || "",
+    student_name: s.studentName || "",
+    prelim: s.prelim ?? "",
+    midterm: s.midterm ?? "",
+    prefinal: s.prefinal ?? "",
+    finals: s.finals ?? "",
+    average: s.average ?? "",
+    gwa: s.gwa ?? "",
+    remarks: s.remarks ?? "",
+    year_level: s.yearLevel || "",
+    semester: s.semester || "",
+  });
 
-  function gradeChip(value) {
-    if (value === null || value === undefined || value === "") return "";
-    const num = Number(value);
-    if (Number.isNaN(num)) return `${value}`;
-    return `<span class="score-pill">${num}</span>`;
-  }
+  const pending = new Map();
+  const scheduleSave = (data) => {
+    const key = `${data.student_name}|${data.subject_name}|${data.year_level}|${data.semester}`;
+    if (pending.has(key)) clearTimeout(pending.get(key));
+    pending.set(
+      key,
+      setTimeout(async () => {
+        pending.delete(key);
+        try {
+          await upsertSubjects([
+            {
+              subjectName: data.subject_name,
+              studentName: data.student_name,
+              prelim: data.prelim === "" ? null : Number(data.prelim),
+              midterm: data.midterm === "" ? null : Number(data.midterm),
+              prefinal: data.prefinal === "" ? null : Number(data.prefinal),
+              finals: data.finals === "" ? null : Number(data.finals),
+              average: data.average === "" ? null : Number(data.average),
+              gwa: data.gwa === "" ? null : Number(data.gwa),
+              remarks: data.remarks || null,
+              yearLevel: data.year_level || null,
+              semester: data.semester || null,
+            },
+          ]);
+          showToast("success", "Grade updated.");
+        } catch (err) {
+          console.error("grade update failed", err);
+          showToast("error", "Update failed.");
+        }
+      }, 150)
+    );
+  };
 
-  function colorBadge(value, invert = false) {
-    if (value === null || value === undefined || value === "") return "";
-    const num = Number(value);
-    if (Number.isNaN(num)) return `${value}`;
-    const normalized = invert ? 100 - (num - 1) * 25 : num;
-    const color = spectralColor(normalized, 0, 100);
-    return `<span class="score-badge" style="background:${color};">${num}</span>`;
-  }
+  const table = new Tabulator(tableEl, {
+    data: subjectsData.map(toRow),
+    layout: "fitColumns",
+    height: "520px",
+    pagination: "local",
+    paginationSize: 10,
+    reactiveData: true,
+    columns: [
+      { title: "Subject", field: "subject_name", editor: "input" },
+      { title: "Student", field: "student_name", editor: "input" },
+      { title: "Prelim", field: "prelim", editor: "number", width: 90 },
+      { title: "Midterm", field: "midterm", editor: "number", width: 90 },
+      { title: "Prefinal", field: "prefinal", editor: "number", width: 90 },
+      { title: "Finals", field: "finals", editor: "number", width: 90 },
+      { title: "Average", field: "average", editor: false, width: 100 },
+      { title: "GWA", field: "gwa", editor: false, width: 90 },
+      { title: "Remarks", field: "remarks", editor: false, width: 120 },
+      { title: "Year Level", field: "year_level", editor: "input", width: 120 },
+      {
+        title: "Semester",
+        field: "semester",
+        editor: "list",
+        editorParams: { values: ["First", "Second"], clearable: false },
+        width: 120,
+      },
+    ],
+  });
 
-  function getFilteredSubjects() {
-    const q = gradingState.query.toLowerCase();
-    return subjectsData.filter((s) => {
-      const matchesText =
-        (s.subjectName || "").toLowerCase().includes(q) ||
-        (s.studentName || "").toLowerCase().includes(q);
-      const matchesYear = !gradingState.yearLevel || s.yearLevel === gradingState.yearLevel;
-      const matchesSemester = !gradingState.semester || s.semester === gradingState.semester;
-      return matchesText && matchesYear && matchesSemester;
+  table.on("cellEdited", (cell) => {
+    const data = cell.getRow().getData();
+    const idx = subjectsData.findIndex(
+      (s) =>
+        s.studentName === data.student_name &&
+        s.subjectName === data.subject_name &&
+        s.yearLevel === data.year_level &&
+        s.semester === data.semester
+    );
+    if (idx >= 0) {
+      subjectsData[idx] = {
+        ...subjectsData[idx],
+        subjectName: data.subject_name,
+        studentName: data.student_name,
+        prelim: data.prelim,
+        midterm: data.midterm,
+        prefinal: data.prefinal,
+        finals: data.finals,
+        yearLevel: data.year_level,
+        semester: data.semester,
+      };
+    }
+    scheduleSave(data);
+  });
+
+  if (search) {
+    search.addEventListener("input", () => {
+      const q = search.value.trim().toLowerCase();
+      if (!q) {
+        table.clearFilter();
+        return;
+      }
+      table.setFilter((data) => {
+        const hay = [
+          data.subject_name,
+          data.student_name,
+          data.year_level,
+          data.semester,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
+      });
     });
   }
-
-  function paginate(list, page, pageSize) {
-    const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
-    const safePage = Math.min(Math.max(1, page), totalPages);
-    const start = (safePage - 1) * pageSize;
-    return {
-      items: list.slice(start, start + pageSize),
-      page: safePage,
-      totalPages,
-    };
-  }
-
-  function renderGradeRows() {
-    const filtered = getFilteredSubjects();
-    const { items, page, totalPages } = paginate(
-      filtered,
-      gradingState.page,
-      gradingState.pageSize
-    );
-    gradingState.page = page;
-    rows.innerHTML = items.length
-      ? items
-          .map((s) => {
-        const remarksChip =
-          (s.remarks || "").toUpperCase() === "FAILED"
-            ? `<span class="chip red">FAILED</span>`
-            : (s.remarks || "").toUpperCase() === "PASSED"
-            ? `<span class="chip green">PASSED</span>`
-            : `${s.remarks || ""}`;
-        return `
-            <tr>
-              <td>${s.subjectName || ""}</td>
-              <td>${s.studentName || ""}</td>
-              <td>
-                <span class="avg-tooltip">
-                  <span class="avg-wrap">
-                    ${colorBadge(s.average)}
-                    <span class="avg-line"></span>
-                  </span>
-                <span class="avg-tooltip-card">
-                  <span class="avg-title">Grade Breakdown</span>
-                  <span class="avg-row"><span>Prelim</span><strong>${s.prelim ?? "-"}</strong></span>
-                  <span class="avg-row"><span>Midterm</span><strong>${s.midterm ?? "-"}</strong></span>
-                  <span class="avg-row"><span>Prefinal</span><strong>${s.prefinal ?? "-"}</strong></span>
-                  <span class="avg-row"><span>Finals</span><strong>${s.finals ?? "-"}</strong></span>
-                </span>
-              </span>
-            </td>
-            <td>${colorBadge(s.gwa, true)}</td>
-            <td>${remarksChip}</td>
-            <td>${s.yearLevel || ""}</td>
-            <td>${s.semester || ""}</td>
-          </tr>
-        `;
-          })
-          .join("")
-      : emptyTableRow(7);
-    pageInfo.textContent = `Page ${page} of ${totalPages} · ${filtered.length} records`;
-    prevBtn.disabled = page <= 1;
-    nextBtn.disabled = page >= totalPages;
-  }
-
-  search.addEventListener("input", () => {
-    gradingState.query = search.value.trim();
-    gradingState.page = 1;
-    renderGradeRows();
-  });
-  yearFilter.addEventListener("change", () => {
+  yearFilter && yearFilter.addEventListener("change", () => {
     gradingState.yearLevel = yearFilter.value;
-    gradingState.page = 1;
-    renderGradeRows();
+    table.setFilter((data) => {
+      if (gradingState.yearLevel && data.year_level !== gradingState.yearLevel) return false;
+      if (gradingState.semester && data.semester !== gradingState.semester) return false;
+      return true;
+    });
   });
-  semesterFilter.addEventListener("change", () => {
+  semesterFilter && semesterFilter.addEventListener("change", () => {
     gradingState.semester = semesterFilter.value;
-    gradingState.page = 1;
-    renderGradeRows();
+    table.setFilter((data) => {
+      if (gradingState.yearLevel && data.year_level !== gradingState.yearLevel) return false;
+      if (gradingState.semester && data.semester !== gradingState.semester) return false;
+      return true;
+    });
   });
-  prevBtn.addEventListener("click", () => {
-    gradingState.page -= 1;
-    renderGradeRows();
-  });
-  nextBtn.addEventListener("click", () => {
-    gradingState.page += 1;
-    renderGradeRows();
-  });
-  renderGradeRows();
-
-
-    if (window.matchMedia("(pointer: coarse)").matches) {
-      rows.addEventListener("pointerup", (e) => {
-        if (e.pointerType === "mouse" && e.button !== 0) return;
-        const tooltip = e.target.closest(".avg-tooltip");
-        if (!tooltip) return;
-        rows.querySelectorAll(".avg-tooltip.active").forEach((el) => {
-          if (el !== tooltip) el.classList.remove("active");
-        });
-        tooltip.classList.toggle("active");
-      });
-    }
 }
 
 function bindTokenActions() {
@@ -1358,12 +1392,16 @@ function bindTokenActions() {
   const activePrev = document.getElementById("active-token-prev");
   const activeNext = document.getElementById("active-token-next");
   const activePageInfo = document.getElementById("active-token-page-info");
+  const activeSelectAll = document.getElementById("active-select-all");
 
   const selectedIds = new Set();
+  let selectAllIssues = false;
   let listPage = 1;
   const listPageSize = 8;
   let activePage = 1;
   const activePageSize = 6;
+  const activeSelected = new Set();
+  let selectAllActive = false;
 
   const subjectMetaByName = subjectsData.reduce((acc, row) => {
     if (!row.studentName) return acc;
@@ -1401,6 +1439,13 @@ function bindTokenActions() {
       if (semesterFilter?.value && meta.semester !== semesterFilter.value) return false;
       return true;
     });
+    const visibleIds = new Set(filtered.map((s) => s.idCode));
+    Array.from(selectedIds).forEach((id) => {
+      if (!visibleIds.has(id)) selectedIds.delete(id);
+    });
+    if (selectAllIssues) {
+      filtered.forEach((s) => selectedIds.add(s.idCode));
+    }
     const totalPages = Math.max(1, Math.ceil(filtered.length / listPageSize));
     listPage = Math.min(listPage, totalPages);
     const start = (listPage - 1) * listPageSize;
@@ -1428,6 +1473,9 @@ function bindTokenActions() {
     if (listPageInfo) listPageInfo.textContent = `Page ${listPage} of ${totalPages} · ${filtered.length} records`;
     if (listPrev) listPrev.disabled = listPage <= 1;
     if (listNext) listNext.disabled = listPage >= totalPages;
+    if (selectAllBtn) {
+      selectAllBtn.checked = selectAllIssues && filtered.length > 0;
+    }
   };
   window._renderTokenList = renderTokenList;
 
@@ -1499,17 +1547,21 @@ function bindTokenActions() {
       if (target.type !== "checkbox") return;
       if (target.checked) selectedIds.add(target.value);
       else selectedIds.delete(target.value);
+      if (selectAllIssues && !target.checked) {
+        selectAllIssues = false;
+        if (selectAllBtn) selectAllBtn.checked = false;
+      }
     });
   }
 
   if (selectAllBtn) {
-    selectAllBtn.onclick = () => {
-      if (!list) return;
-      list.querySelectorAll("input[type=checkbox]").forEach((cb) => {
-        cb.checked = true;
-        selectedIds.add(cb.value);
-      });
-    };
+    selectAllBtn.addEventListener("change", () => {
+      selectAllIssues = selectAllBtn.checked;
+      if (!selectAllIssues) {
+        selectedIds.clear();
+      }
+      renderTokenList(search?.value || "");
+    });
   }
 
   const onListFilter = () => {
@@ -1566,23 +1618,39 @@ function bindTokenActions() {
     const container = document.getElementById("active-token-list");
     if (!container) return;
     const rows = getActiveTokenRows();
+    if (selectAllActive) {
+      rows.forEach((r) => activeSelected.add(r.studentId));
+    }
     const totalPages = Math.max(1, Math.ceil(rows.length / activePageSize));
     activePage = Math.min(activePage, totalPages);
     const start = (activePage - 1) * activePageSize;
     const slice = rows.slice(start, start + activePageSize);
+    const visibleIds = new Set(rows.map((r) => r.studentId));
+    Array.from(activeSelected).forEach((id) => {
+      if (!visibleIds.has(id)) activeSelected.delete(id);
+    });
+    const hasSelection = activeSelected.size > 0;
     if (!rows.length) {
       container.innerHTML = `<p style="color:var(--muted);">No keys managed.</p>`;
     } else {
       container.innerHTML = slice
         .map(
           (r) => `
-          <div class="glass token-card" data-student-id="${r.studentId}">
+          <div class="glass token-card ${hasSelection ? "bulk-mode" : ""}" data-student-id="${r.studentId}">
+            <label class="token-check">
+              <input type="checkbox" value="${r.studentId}" ${activeSelected.has(r.studentId) ? "checked" : ""} />
+            </label>
             <div class="token-main">
               <div class="token-value">${r.token}</div>
               <div class="token-sub">${r.studentId}</div>
               <div class="token-meta">${r.name} · ${r.email || "No email"} · ${r.course || "No course"} · ${r.yearLevel || "Year?"} · ${r.semester || "Semester?"}</div>
             </div>
-            <button class="btn ghost token-reroll" data-student-id="${r.studentId}">Reroll &amp; Send</button>
+            <div class="token-actions">
+              <button class="btn ghost token-reroll" data-student-id="${r.studentId}">Reroll &amp; Send</button>
+              <button class="btn ghost token-delete" data-student-id="${r.studentId}" aria-label="Delete">
+                <i class="bx bx-trash"></i>
+              </button>
+            </div>
           </div>
         `
         )
@@ -1591,6 +1659,15 @@ function bindTokenActions() {
     if (activePageInfo) activePageInfo.textContent = `Page ${activePage} of ${totalPages} · ${rows.length} records`;
     if (activePrev) activePrev.disabled = activePage <= 1;
     if (activeNext) activeNext.disabled = activePage >= totalPages;
+    if (activeSelectAll) {
+      activeSelectAll.checked = selectAllActive && rows.length > 0;
+    }
+    const bulkWrap = document.getElementById("active-bulk-actions");
+    if (bulkWrap) {
+      bulkWrap.classList.toggle("hidden", activeSelected.size === 0);
+      const countEl = bulkWrap.querySelector(".bulk-count");
+      if (countEl) countEl.textContent = `${activeSelected.size} selected`;
+    }
   };
 
   const onActiveFilter = () => {
@@ -1610,6 +1687,16 @@ function bindTokenActions() {
     renderActiveKeys();
   });
   renderActiveKeys();
+
+  if (activeSelectAll) {
+    activeSelectAll.addEventListener("change", () => {
+      selectAllActive = activeSelectAll.checked;
+      if (!selectAllActive) {
+        activeSelected.clear();
+      }
+      renderActiveKeys();
+    });
+  }
 
   document.addEventListener("click", async (e) => {
     const btn = e.target.closest(".token-reroll");
@@ -1638,6 +1725,115 @@ function bindTokenActions() {
       btn.textContent = "Reroll & Send";
     }
   });
+
+  document.addEventListener("change", (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (!target.closest(".token-card")) return;
+    if (target.type !== "checkbox") return;
+    if (target.checked) activeSelected.add(target.value);
+    else activeSelected.delete(target.value);
+    if (selectAllActive && !target.checked) {
+      selectAllActive = false;
+      if (activeSelectAll) activeSelectAll.checked = false;
+    }
+    renderActiveKeys();
+  });
+
+  document.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".token-delete");
+    if (!btn) return;
+    const studentId = btn.dataset.studentId;
+    if (!studentId) return;
+    const confirm = await Swal.fire({
+      icon: "warning",
+      title: "Delete key?",
+      text: "This will remove the active token for the student.",
+      showCancelButton: true,
+      confirmButtonText: "Delete",
+    });
+    if (!confirm.isConfirmed) return;
+    btn.disabled = true;
+    try {
+      const resp = await fetch("/.netlify/functions/delete-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ student_id: studentId }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.error || "Delete failed");
+      tokens = tokens.filter((t) => t.studentIdCode !== studentId);
+      activeSelected.delete(studentId);
+      showToast("success", "Token deleted.");
+      renderActiveKeys();
+    } catch (err) {
+      showToast("error", err?.message || "Delete failed.");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  const bulkRerollBtn = document.getElementById("bulk-reroll-send");
+  const bulkDeleteBtn = document.getElementById("bulk-delete");
+  if (bulkRerollBtn) {
+    bulkRerollBtn.onclick = async () => {
+      const ids = Array.from(activeSelected);
+      if (!ids.length) return;
+      bulkRerollBtn.disabled = true;
+      try {
+        for (const id of ids) {
+          const resp = await fetch("/.netlify/functions/reroll-token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ student_id: id }),
+          });
+          const data = await resp.json().catch(() => ({}));
+          if (!resp.ok) throw new Error(data?.error || "Reroll failed");
+          const existing = tokens.find((t) => t.studentIdCode === id);
+          if (existing && data?.token) existing.token = data.token;
+        }
+        showToast("success", "Reroll & send done.");
+        activeSelected.clear();
+        renderActiveKeys();
+      } catch (err) {
+        showToast("error", err?.message || "Bulk reroll failed.");
+      } finally {
+        bulkRerollBtn.disabled = false;
+      }
+    };
+  }
+  if (bulkDeleteBtn) {
+    bulkDeleteBtn.onclick = async () => {
+      const ids = Array.from(activeSelected);
+      if (!ids.length) return;
+      const confirm = await Swal.fire({
+        icon: "warning",
+        title: "Delete selected keys?",
+        text: "This will remove tokens for selected students.",
+        showCancelButton: true,
+        confirmButtonText: "Delete",
+      });
+      if (!confirm.isConfirmed) return;
+      bulkDeleteBtn.disabled = true;
+      try {
+        const resp = await fetch("/.netlify/functions/delete-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ student_ids: ids }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data?.error || "Delete failed");
+        tokens = tokens.filter((t) => !activeSelected.has(t.studentIdCode));
+        activeSelected.clear();
+        showToast("success", "Tokens deleted.");
+        renderActiveKeys();
+      } catch (err) {
+        showToast("error", err?.message || "Bulk delete failed.");
+      } finally {
+        bulkDeleteBtn.disabled = false;
+      }
+    };
+  }
 }
 
 let importCache = {
