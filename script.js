@@ -3,8 +3,7 @@ const teacherScreen = document.getElementById("teacher-screen");
 const guestScreen = document.getElementById("guest-screen");
 const teacherContent = document.getElementById("teacher-content");
 const modalRoot = document.getElementById("modal-root");
-const moreDrawer = document.getElementById("more-drawer");
-const closeDrawerBtn = document.getElementById("close-drawer");
+const moreMenu = document.getElementById("more-menu");
 const logoutBtn = document.getElementById("logout-btn");
 
 const SUPABASE_URL = "https://ehupnvkselcupxqyofzy.supabase.co";
@@ -20,8 +19,6 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     },
   },
 });
-const LS_TOKENS = "elms_tokens";
-
 let currentUser = null;
 let currentView = "dashboard";
 let students = [];
@@ -32,6 +29,49 @@ const masterlistState = { page: 1, pageSize: 10, query: "" };
 const gradingState = { page: 1, pageSize: 10, query: "", yearLevel: "", semester: "" };
 const fetchDebug = { students: { fetched: 0, visible: 0 } };
 let tokenMode = "selected";
+let mailEditor = null;
+const MAIL_DRAFT_KEY = "elms_mail_draft";
+
+function showToast(type, message) {
+  if (typeof Toastify !== "function") {
+    console.warn("Toastify not available:", message);
+    return;
+  }
+  const safeType = ["success", "error", "warning", "info"].includes(type)
+    ? type
+    : "info";
+  Toastify({
+    text: message,
+    duration: 3200,
+    close: true,
+    gravity: "top",
+    position: "right",
+    className: `elms-toast elms-${safeType}`,
+    stopOnFocus: true,
+  }).showToast();
+}
+
+function applyCooldown(button, ms = 1000) {
+  if (!button || button.disabled) return;
+  button.disabled = true;
+  window.setTimeout(() => {
+    button.disabled = false;
+  }, ms);
+}
+
+function emptyTableRow(colspan, message = "Oops I think you're lost") {
+  return `
+    <tr class="empty-row">
+      <td colspan="${colspan}">
+        <div class="empty-state">
+          <i class="bx bx-compass"></i>
+          <div class="empty-title">${message}</div>
+          <div class="empty-sub">No records to display.</div>
+        </div>
+      </td>
+    </tr>
+  `;
+}
 
 const sections = ["BSIT-3B", "BSIT-3A", "BSCS-2A"];
 const subjects = [
@@ -127,13 +167,20 @@ function generateToken() {
   return token;
 }
 
-function loadLocalTokens() {
-  const savedTokens = localStorage.getItem(LS_TOKENS);
-  tokens = savedTokens ? JSON.parse(savedTokens) : [];
-}
-
-function saveLocalTokens() {
-  localStorage.setItem(LS_TOKENS, JSON.stringify(tokens));
+async function fetchTokens() {
+  const { data, error } = await supabaseClient
+    .schema(DB_SCHEMA)
+    .from("student_tokens")
+    .select("student_id, token")
+    .order("created_at", { ascending: true });
+  if (error) {
+    console.error("fetchTokens error", error);
+    throw error;
+  }
+  tokens = (data || []).map((t) => ({
+    token: t.token,
+    studentIdCode: t.student_id,
+  }));
 }
 
 async function fetchStudents() {
@@ -204,7 +251,7 @@ async function loadData() {
   await fetchStudents();
   await fetchSubjects();
   await fetchGrades();
-  loadLocalTokens();
+  await fetchTokens();
 }
 
 async function upsertStudents(records) {
@@ -308,83 +355,141 @@ async function softDeleteAll(table) {
 }
 
 function showLogin() {
-  loginScreen.innerHTML = `
-    <div class="login-brand">
-      <div class="brand-icon" style="margin:0 auto;">EL</div>
-      <h1>Torneros ELMS</h1>
-      <p>Electronic Learning Management System</p>
-    </div>
-    <div class="login-card">
-      <div class="login-tabs">
-        <button class="tab-btn active" data-tab="teacher">Teacher Login</button>
-        <button class="tab-btn" data-tab="token">Token Access</button>
+    loginScreen.innerHTML = `
+      <div class="login-hero">
+        <div class="login-brand">
+          <div class="brand-icon" style="margin:0 auto;">EL</div>
+          <h1>Torneros ELMS</h1>
+          <p>Enterprise Learning Management System</p>
+        </div>
+        <label class="switch-toggle login-toggle">
+          <input type="checkbox" id="dark-mode-toggle" />
+          <span class="slider-toggle">
+            <i class="bx bx-sun sun-icon"></i>
+            <i class="bx bx-moon moon-icon"></i>
+          </span>
+        </label>
       </div>
-      <div id="login-content"></div>
-    </div>
-  `;
+      <div class="login-card">
+        <div class="login-tabs">
+          <button class="tab-btn active" data-tab="teacher">Teacher Login</button>
+          <button class="tab-btn" data-tab="token">Token Access</button>
+        </div>
+        <div id="login-content"></div>
+      </div>
+      <div class="login-note" id="login-note"></div>
+      <footer class="login-footer">© 2026 Adrian R. Angeles. All Rights Reserved.</footer>
+    `;
 
   const loginContent = document.getElementById("login-content");
   const tabButtons = loginScreen.querySelectorAll(".tab-btn");
   let activeTab = "teacher";
 
-  function renderTab() {
-    if (activeTab === "teacher") {
-      loginContent.innerHTML = `
-        <form id="teacher-login" class="grid-2">
-          <div class="section">
-            <label>Email</label>
-            <input class="input" type="email" name="email" placeholder="torneros@elms.com" required />
-          </div>
-          <div class="section">
-            <label>Password</label>
-            <input class="input" type="password" name="password" placeholder="admin" required />
-          </div>
-          <button class="btn primary" style="grid-column:1/-1;">Sign In</button>
-          <p id="login-error" style="color:#ef4444;font-weight:600;"></p>
-        </form>
+    function initFloatFields(scope) {
+      const fields = (scope || document).querySelectorAll(".float-field");
+      fields.forEach((field) => {
+        const input = field.querySelector("input");
+        if (!input) return;
+        const sync = () => {
+          field.classList.toggle("has-value", input.value.trim().length > 0);
+        };
+        input.addEventListener("input", sync);
+        input.addEventListener("blur", sync);
+        sync();
+      });
+    }
+
+    function renderTab() {
+      if (activeTab === "teacher") {
+        loginContent.innerHTML = `
+          <form id="teacher-login" class="grid-2">
+            <div class="section">
+              <div class="float-field">
+                <input class="input" type="email" name="email" required />
+                <label>Email</label>
+              </div>
+            </div>
+            <div class="section">
+              <div class="float-field">
+                <input class="input" type="password" name="password" required />
+                <label>Password</label>
+              </div>
+            </div>
+            <button class="btn primary" style="grid-column:1/-1;">Sign In</button>
+            <p id="login-error" style="color:#ef4444;font-weight:600;"></p>
+          </form>
       `;
-      const form = document.getElementById("teacher-login");
-      form.addEventListener("submit", async (e) => {
+        const form = document.getElementById("teacher-login");
+        form.addEventListener("submit", async (e) => {
         e.preventDefault();
+        const submitBtn = form.querySelector("button");
+        applyCooldown(submitBtn, 1000);
         const email = form.email.value.trim();
         const pass = form.password.value.trim();
+        document.getElementById("login-error").textContent = "";
+        showToast("info", "Validating credentials...");
         const { error } = await supabaseClient.auth.signInWithPassword({
           email,
           password: pass,
         });
         if (error) {
-          document.getElementById("login-error").textContent =
-            "Invalid credentials. Please try again.";
+          showToast("error", "Invalid credentials. Please try again.");
           return;
         }
-        currentUser = { role: "teacher" };
-        window.location.href = "main.html";
-      });
-    } else {
-      loginContent.innerHTML = `
-        <form id="token-login">
-          <label>Access Token</label>
-          <input class="input" type="text" name="token" placeholder="XXXX-XXXX-XXXX-XXXX" required />
-          <button class="btn indigo" style="width:100%;margin-top:12px;">Validate Access</button>
-          <p id="token-error" style="color:#ef4444;font-weight:600;"></p>
-        </form>
-      `;
-      const form = document.getElementById("token-login");
-      form.addEventListener("submit", (e) => {
-        e.preventDefault();
-        const token = form.token.value.trim().toUpperCase();
-        const found = tokens.find((t) => t.token === token);
-        if (found) {
-          currentUser = { role: "guest", token };
-          localStorage.setItem("elms_guest_token", token);
+          showToast("success", "Signed in. Redirecting...");
+          currentUser = { role: "teacher" };
           window.location.href = "main.html";
-        } else {
-          document.getElementById("token-error").textContent =
-            "Invalid Access Token.";
+        });
+        const note = document.getElementById("login-note");
+        if (note) {
+          note.innerHTML =
+            `Administrator access only.<span>Use your faculty credentials to manage records.</span>`;
         }
-      });
+        initFloatFields(form);
+      } else {
+        loginContent.innerHTML = `
+          <form id="token-login">
+            <div class="float-field">
+              <input class="input" type="text" name="token" required />
+              <label>Access Token</label>
+            </div>
+            <button class="btn indigo" style="width:100%;margin-top:12px;">Validate Access</button>
+            <p id="token-error" style="color:#ef4444;font-weight:600;"></p>
+          </form>
+      `;
+        const form = document.getElementById("token-login");
+        form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const submitBtn = form.querySelector("button");
+        applyCooldown(submitBtn, 1000);
+        const token = form.token.value.trim().toUpperCase();
+        document.getElementById("token-error").textContent = "";
+        showToast("info", "Validating access token...");
+        try {
+          await fetchTokens();
+          const found = tokens.find((t) => t.token === token);
+          if (found) {
+            showToast("success", "Access granted.");
+            currentUser = { role: "guest", token };
+            await fetchStudents();
+            await fetchSubjects();
+            showGuest();
+          } else {
+            showToast("error", "Invalid access token.");
+          }
+          } catch (err) {
+            console.error("token validation failed", err);
+            showToast("warning", "Token validation failed. Please try again.");
+          }
+        });
+        const note = document.getElementById("login-note");
+        if (note) {
+          note.innerHTML =
+            `To get your token access, check your email if your teacher sent a token code.<span>Example: XXXX-XXXX-XXXX-XXXX</span>`;
+        }
+        initFloatFields(form);
+      }
     }
-  }
 
   tabButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -396,10 +501,12 @@ function showLogin() {
   });
 
   renderTab();
+  setupDarkModeToggle();
 }
 
 async function showTeacher() {
   if (!teacherScreen) return;
+  document.body.classList.remove("guest-only");
   guestScreen && guestScreen.classList.add("hidden");
   teacherScreen.classList.remove("hidden");
   await loadData();
@@ -408,6 +515,7 @@ async function showTeacher() {
 
 function showGuest() {
   if (!guestScreen) return;
+  document.body.classList.add("guest-only");
   teacherScreen && teacherScreen.classList.add("hidden");
   guestScreen.classList.remove("hidden");
   renderGuestPortal();
@@ -436,8 +544,9 @@ function renderView(view) {
       teacherContent.innerHTML = renderTokens();
       bindTokenActions();
       break;
-    case "analytics":
-      teacherContent.innerHTML = renderAnalytics();
+    case "mail":
+      teacherContent.innerHTML = renderMailEditor();
+      initMailEditor();
       break;
     default:
       teacherContent.innerHTML = renderDashboard();
@@ -477,7 +586,7 @@ function renderDashboard() {
           <button class="btn ghost" data-action="masterlist">Import Masterlist</button>
           <button class="btn ghost" data-action="grading">Record Grades</button>
           <button class="btn ghost" data-action="tokens">Generate Access</button>
-          <button class="btn ghost" data-action="analytics">View Insights</button>
+          <button class="btn ghost" data-action="mail">Mail Editor</button>
         </div>
       </div>
       <div class="card">
@@ -669,40 +778,36 @@ function renderTokens() {
   `;
 }
 
-function renderAnalytics() {
-  const subjectAvgs = {};
-  grades.forEach((g) => {
-    if (!subjectAvgs[g.subjectName]) subjectAvgs[g.subjectName] = [];
-    subjectAvgs[g.subjectName].push(g.average);
-  });
-  const subjectRows = Object.entries(subjectAvgs).map(([sub, arr]) => {
-    const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
-    return { sub, avg: Number(avg.toFixed(1)) };
-  });
-  const maxAvg = Math.max(...subjectRows.map((s) => s.avg), 100);
+function renderMailEditor() {
   return `
     <section class="section">
-      <h2>Performance Analytics</h2>
-      <p>Quick insights into subject averages.</p>
+      <h2>Mail Editor</h2>
+      <p>Customize your NodeMailer template before sending.</p>
     </section>
-    <div class="section card">
-      <h3>Subject Comparison (Avg)</h3>
-      <div style="margin-top:16px;display:grid;gap:10px;">
-        ${subjectRows
-          .map(
-            (s) => `
-            <div>
-              <div style="display:flex;justify-content:space-between;font-weight:600;">
-                <span>${s.sub}</span>
-                <span>${s.avg}</span>
-              </div>
-              <div style="height:10px;background:#e2e8f0;border-radius:999px;overflow:hidden;">
-                <div style="height:100%;width:${(s.avg / maxAvg) * 100}%;background:var(--indigo);"></div>
-              </div>
-            </div>
-          `
-          )
-          .join("")}
+    <div class="section card mail-editor">
+      <div class="mail-note">
+        Placeholders you can use:
+        <strong>{Session_Token}</strong>, <strong>{Date}</strong>, <strong>{Time}</strong>,
+        <strong>{Student_Name}</strong>, <strong>{Course}</strong>, <strong>{Student_ID}</strong>,
+        <strong>{Email}</strong>, <strong>{Year_Level}</strong>, <strong>{Semester}</strong>,
+        <strong>{Portal_Link}</strong>.
+      </div>
+      <div class="mail-templates">
+        <button class="btn ghost" data-template="default">Default</button>
+        <button class="btn ghost" data-template="access">Access Token</button>
+        <button class="btn ghost" data-template="reminder">Reminder</button>
+        <button class="btn ghost" data-template="result">Result Update</button>
+      </div>
+      <div class="section">
+        <label style="font-size:12px;font-weight:700;color:var(--muted);">Title</label>
+        <input id="mail-title" class="input" placeholder="Access Token Delivery" />
+      </div>
+      <div class="quill-shell">
+        <div id="mail-editor"></div>
+      </div>
+      <div class="mail-actions">
+        <button class="btn ghost" id="mail-save-draft">Save Draft</button>
+        <button class="btn primary" id="mail-save-final">Save Final</button>
       </div>
     </div>
   `;
@@ -726,63 +831,216 @@ function renderGuestPortal() {
     return;
   }
 
-  const studentGrades = grades.filter((g) => g.studentIdCode === student.idCode);
+  const studentGrades = subjectsData.filter(
+    (g) =>
+      g.studentName &&
+      student.fullName &&
+      g.studentName.toLowerCase() === student.fullName.toLowerCase()
+  );
+  const gradeValues = studentGrades
+    .map((g) => Number(g.gwa))
+    .filter((n) => !Number.isNaN(n));
   const overall =
-    studentGrades.length > 0
-      ? (
-          studentGrades.reduce((acc, g) => acc + g.average, 0) /
-          studentGrades.length
-        ).toFixed(2)
+    gradeValues.length > 0
+      ? (gradeValues.reduce((acc, g) => acc + g, 0) / gradeValues.length).toFixed(2)
       : "N/A";
+  const subjectCount = studentGrades.length;
+  const passCount = studentGrades.filter((g) =>
+    String(g.remarks || "").toUpperCase().includes("PASS")
+  ).length;
+  const failCount = studentGrades.filter((g) =>
+    String(g.remarks || "").toUpperCase().includes("FAIL")
+  ).length;
+  const ranked = studentGrades
+    .map((g) => ({
+      name: g.subjectName,
+      value: Number(g.gwa),
+    }))
+    .filter((g) => !Number.isNaN(g.value));
+  const highest = ranked.length
+    ? ranked.reduce((a, b) => (a.value >= b.value ? a : b))
+    : null;
+  const lowest = ranked.length
+    ? ranked.reduce((a, b) => (a.value <= b.value ? a : b))
+    : null;
 
-  guestScreen.innerHTML = `
-    <div class="guest-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div>
-          <h2>${student.fullName}</h2>
-          <p>${student.section} · ${student.yearLevel}</p>
-        </div>
-        <button class="btn danger" id="guest-logout">Logout</button>
-      </div>
-      <div class="section card">
-        <h3>Current GWA</h3>
-        <div class="stat-value">${overall}</div>
-      </div>
-      <div class="section card">
-        <h3>Grades</h3>
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Subject</th>
-              <th>P</th>
-              <th>M</th>
-              <th>PF</th>
-              <th>F</th>
-              <th>Avg</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${studentGrades
+    const normalizeYear = (value) => {
+      if (!value) return "UNKNOWN YEAR";
+      const v = String(value).trim().toLowerCase();
+      if (v.startsWith("1")) return "1ST YEAR";
+      if (v.startsWith("2")) return "2ND YEAR";
+      if (v.startsWith("3")) return "3RD YEAR";
+      if (v.startsWith("4")) return "4TH YEAR";
+      if (v.includes("first")) return "1ST YEAR";
+      if (v.includes("second")) return "2ND YEAR";
+      if (v.includes("third")) return "3RD YEAR";
+      if (v.includes("fourth")) return "4TH YEAR";
+      return "UNKNOWN YEAR";
+    };
+    const normalizeSem = (value) => {
+      if (!value) return "UNKNOWN SEMESTER";
+      const v = String(value).trim().toLowerCase();
+      if (v.startsWith("1") || v.includes("first")) return "FIRST";
+      if (v.startsWith("2") || v.includes("second")) return "SECOND";
+      return "UNKNOWN SEMESTER";
+    };
+    const grouped = studentGrades.reduce((acc, g) => {
+      const year = normalizeYear(g.yearLevel);
+      const sem = normalizeSem(g.semester);
+      if (!acc[year]) acc[year] = {};
+      if (!acc[year][sem]) acc[year][sem] = [];
+      acc[year][sem].push(g);
+      return acc;
+    }, {});
+    const yearOrder = ["1ST YEAR", "2ND YEAR", "3RD YEAR", "4TH YEAR", "UNKNOWN YEAR"];
+    const semOrder = ["FIRST", "SECOND", "UNKNOWN SEMESTER"];
+      const groupedHtml =
+        studentGrades.length === 0
+          ? `
+            <div class="empty-state" style="margin-top:12px;">
+              <i class="bx bx-compass"></i>
+              <div class="empty-title">Oops I think you're lost</div>
+              <div class="empty-sub">No grades found.</div>
+            </div>
+          `
+          : yearOrder
+              .filter((y) => grouped[y])
               .map(
-                (g) => `
-              <tr>
-                <td>${g.subjectName}</td>
-                <td>${g.prelim}</td>
-                <td>${g.midterm}</td>
-                <td>${g.prefinal}</td>
-                <td>${g.finals}</td>
-                <td>${g.average}</td>
-              </tr>
+              (year) => `
+              <div style="margin-top:16px;">
+                <h4 style="margin:0 0 8px;">${year.toLowerCase().replace(/(^\w| \w)/g, (m) => m.toUpperCase())}</h4>
+                ${semOrder
+                  .filter((s) => grouped[year][s])
+                  .map(
+                    (sem) => `
+                    <div style="margin:8px 0 14px;">
+                      <div class="chip blue" style="margin-bottom:8px;">${sem}</div>
+                      <table class="table">
+                        <thead>
+                          <tr>
+                            <th>Subject</th>
+                            <th>P</th>
+                            <th>M</th>
+                            <th>PF</th>
+                            <th>F</th>
+                            <th>GWA</th>
+                            <th>Remarks</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${grouped[year][sem]
+                            .map(
+                              (g) => `
+                            <tr>
+                              <td>${g.subjectName}</td>
+                              <td>${g.prelim}</td>
+                              <td>${g.midterm}</td>
+                              <td>${g.prefinal}</td>
+                              <td>${g.finals}</td>
+                              <td>${g.gwa ?? "N/A"}</td>
+                              <td>
+                                <span class="chip ${
+                                  String(g.remarks || "")
+                                    .toUpperCase()
+                                    .includes("PASS")
+                                    ? "green"
+                                    : String(g.remarks || "")
+                                        .toUpperCase()
+                                        .includes("FAIL")
+                                    ? "red"
+                                    : "blue"
+                                }">${g.remarks || "N/A"}</span>
+                              </td>
+                            </tr>
+                          `
+                            )
+                            .join("")}
+                        </tbody>
+                      </table>
+                    </div>
+                  `
+                  )
+                  .join("")}
+              </div>
             `
-              )
-              .join("")}
-          </tbody>
-        </table>
+            )
+            .join("");
+
+    guestScreen.innerHTML = `
+      <div class="guest-card">
+        <div class="guest-header">
+          <div>
+            <h2>${student.fullName}</h2>
+            <p>${student.course || "—"} · ${student.gender || "—"}</p>
+            <div class="guest-meta">
+              <span>ID: ${student.idCode || "—"}</span>
+              <span>Email: ${student.email || "—"}</span>
+              <span>Contact: ${student.contactNumber || "—"}</span>
+              <span>Birthdate: ${student.birthdate || "—"}</span>
+            </div>
+          </div>
+          <button class="btn danger" id="guest-logout">Logout</button>
+        </div>
+        <div class="section card collapsible open" data-collapsible="summary">
+          <button class="collapse-toggle" type="button">
+            <span>Summary Statistics</span>
+            <i class="bx bx-chevron-down"></i>
+          </button>
+          <div class="collapse-body">
+            <div class="stat-grid" style="margin-top:12px;">
+            <div class="stat-card">
+              <div class="stat-title">Highest GWA</div>
+              <div class="stat-value">${highest ? highest.value : "N/A"}</div>
+              <div style="color:var(--muted);font-size:12px;margin-top:6px;">
+                ${highest ? highest.name : "—"}
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-title">Lowest GWA</div>
+              <div class="stat-value">${lowest ? lowest.value : "N/A"}</div>
+              <div style="color:var(--muted);font-size:12px;margin-top:6px;">
+                ${lowest ? lowest.name : "—"}
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-title">Subjects</div>
+              <div class="stat-value">${subjectCount}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-title">Passed / Failed</div>
+              <div class="stat-value">${passCount} / ${failCount}</div>
+              <div style="margin-top:8px;">
+                <span class="chip green">PASSED ${passCount}</span>
+                <span class="chip red" style="margin-left:6px;">FAILED ${failCount}</span>
+              </div>
+            </div>
+            </div>
+          </div>
+        </div>
+        <div class="section card collapsible open" data-collapsible="grades">
+          <button class="collapse-toggle" type="button">
+            <span>Grades</span>
+            <i class="bx bx-chevron-down"></i>
+          </button>
+          <div class="collapse-body">
+            ${groupedHtml}
+          </div>
+        </div>
+        <div class="guest-note">
+          Prepared by your best IT Teacher
+          <span>~Gabriel Thomas Torneros</span>
+        </div>
       </div>
-    </div>
-  `;
-  document.getElementById("guest-logout").onclick = logout;
-}
+    `;
+    document.getElementById("guest-logout").onclick = logout;
+    guestScreen.querySelectorAll(".collapse-toggle").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const card = btn.closest(".collapsible");
+        if (!card) return;
+        card.classList.toggle("open");
+      });
+    });
+  }
 
 function bindDashboardActions() {
   teacherContent.querySelectorAll("[data-action]").forEach((btn) => {
@@ -835,22 +1093,24 @@ function bindMasterlistActions() {
       masterlistState.pageSize
     );
     masterlistState.page = page;
-    rows.innerHTML = items
-      .map(
-        (s) => `
-          <tr>
-            <td>${s.idCode || ""}</td>
-            <td>${s.fullName || ""}</td>
-            <td>${s.gender || ""}</td>
-            <td>${s.birthdate || ""}</td>
-            <td>${s.age || ""}</td>
-            <td>${s.course || ""}</td>
-            <td>${s.contactNumber || ""}</td>
-            <td>${s.email || ""}</td>
-          </tr>
-        `
-      )
-      .join("");
+    rows.innerHTML = items.length
+      ? items
+          .map(
+            (s) => `
+            <tr>
+              <td>${s.idCode || ""}</td>
+              <td>${s.fullName || ""}</td>
+              <td>${s.gender || ""}</td>
+              <td>${s.birthdate || ""}</td>
+              <td>${s.age || ""}</td>
+              <td>${s.course || ""}</td>
+              <td>${s.contactNumber || ""}</td>
+              <td>${s.email || ""}</td>
+            </tr>
+          `
+          )
+          .join("")
+      : emptyTableRow(8);
     pageInfo.textContent = `Page ${page} of ${totalPages} · ${filtered.length} records`;
     prevBtn.disabled = page <= 1;
     nextBtn.disabled = page >= totalPages;
@@ -940,8 +1200,9 @@ function bindGradeActions() {
       gradingState.pageSize
     );
     gradingState.page = page;
-    rows.innerHTML = items
-      .map((s) => {
+    rows.innerHTML = items.length
+      ? items
+          .map((s) => {
         const remarksChip =
           (s.remarks || "").toUpperCase() === "FAILED"
             ? `<span class="chip red">FAILED</span>`
@@ -949,15 +1210,15 @@ function bindGradeActions() {
             ? `<span class="chip green">PASSED</span>`
             : `${s.remarks || ""}`;
         return `
-          <tr>
-            <td>${s.subjectName || ""}</td>
-            <td>${s.studentName || ""}</td>
-            <td>
-              <span class="avg-tooltip">
-                <span class="avg-wrap">
-                  ${colorBadge(s.average)}
-                  <span class="avg-line"></span>
-                </span>
+            <tr>
+              <td>${s.subjectName || ""}</td>
+              <td>${s.studentName || ""}</td>
+              <td>
+                <span class="avg-tooltip">
+                  <span class="avg-wrap">
+                    ${colorBadge(s.average)}
+                    <span class="avg-line"></span>
+                  </span>
                 <span class="avg-tooltip-card">
                   <span class="avg-title">Grade Breakdown</span>
                   <span class="avg-row"><span>Prelim</span><strong>${s.prelim ?? "-"}</strong></span>
@@ -973,8 +1234,9 @@ function bindGradeActions() {
             <td>${s.semester || ""}</td>
           </tr>
         `;
-      })
-      .join("");
+          })
+          .join("")
+      : emptyTableRow(7);
     pageInfo.textContent = `Page ${page} of ${totalPages} · ${filtered.length} records`;
     prevBtn.disabled = page <= 1;
     nextBtn.disabled = page >= totalPages;
@@ -1006,14 +1268,17 @@ function bindGradeActions() {
   renderGradeRows();
 
 
-  rows.addEventListener("click", (e) => {
-    const tooltip = e.target.closest(".avg-tooltip");
-    if (!tooltip) return;
-    rows.querySelectorAll(".avg-tooltip.active").forEach((el) => {
-      if (el !== tooltip) el.classList.remove("active");
-    });
-    tooltip.classList.toggle("active");
-  });
+    if (window.matchMedia("(pointer: coarse)").matches) {
+      rows.addEventListener("pointerup", (e) => {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        const tooltip = e.target.closest(".avg-tooltip");
+        if (!tooltip) return;
+        rows.querySelectorAll(".avg-tooltip.active").forEach((el) => {
+          if (el !== tooltip) el.classList.remove("active");
+        });
+        tooltip.classList.toggle("active");
+      });
+    }
 }
 
 function bindTokenActions() {
@@ -1509,7 +1774,10 @@ function bindMainEvents() {
   document.querySelectorAll(".nav-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       if (btn.dataset.view === "more") {
-        moreDrawer.classList.remove("hidden");
+        if (!moreMenu) return;
+        const isHidden = moreMenu.classList.contains("hidden");
+        moreMenu.classList.toggle("hidden", !isHidden);
+        moreMenu.setAttribute("aria-hidden", String(!isHidden));
       } else if (btn.dataset.view === "import") {
         openImportCenter();
       } else {
@@ -1518,16 +1786,23 @@ function bindMainEvents() {
     });
   });
 
-  document.querySelectorAll(".drawer-link").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      renderView(btn.dataset.view);
-      moreDrawer.classList.add("hidden");
+  if (moreMenu) {
+    moreMenu.querySelectorAll("[data-view]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        renderView(btn.dataset.view);
+        moreMenu.classList.add("hidden");
+        moreMenu.setAttribute("aria-hidden", "true");
+      });
     });
-  });
-
-  closeDrawerBtn.addEventListener("click", () => {
-    moreDrawer.classList.add("hidden");
-  });
+    document.addEventListener("click", (e) => {
+      const isToggle = e.target.closest('.nav-btn[data-view="more"]');
+      const isInside = e.target.closest("#more-menu");
+      if (!isToggle && !isInside) {
+        moreMenu.classList.add("hidden");
+        moreMenu.setAttribute("aria-hidden", "true");
+      }
+    });
+  }
 
   logoutBtn.addEventListener("click", logout);
 
@@ -1539,15 +1814,153 @@ function bindMainEvents() {
   });
 }
 
+function initMailEditor() {
+  const editorEl = document.getElementById("mail-editor");
+  if (!editorEl || typeof Quill !== "function") return;
+  const draft = JSON.parse(localStorage.getItem(MAIL_DRAFT_KEY) || "{}");
+  const title = document.getElementById("mail-title");
+  const draftBtn = document.getElementById("mail-save-draft");
+  const finalBtn = document.getElementById("mail-save-final");
+  const templateButtons = document.querySelectorAll("[data-template]");
+
+  if (mailEditor && mailEditor.root && !editorEl.contains(mailEditor.root)) {
+    mailEditor = null;
+  }
+
+  if (!mailEditor) {
+    mailEditor = new Quill(editorEl, {
+      theme: "snow",
+      placeholder: "Write your message... Include {Session_Token} where needed.",
+      modules: {
+        toolbar: [
+          [{ font: [] }, { size: [] }],
+          ["bold", "italic", "underline", "strike"],
+          [{ color: [] }, { background: [] }],
+          [{ script: "sub" }, { script: "super" }],
+          [{ header: 1 }, { header: 2 }, "blockquote", "code-block"],
+          [{ list: "ordered" }, { list: "bullet" }],
+          [{ align: [] }],
+          ["link", "clean"],
+        ],
+      },
+    });
+  }
+
+  if (draft.html && mailEditor.root.innerHTML.trim() === "<p><br></p>") {
+    mailEditor.root.innerHTML = draft.html;
+  }
+  if (title && draft.title) title.value = draft.title;
+
+  const saveDraft = () => {
+    localStorage.setItem(
+      MAIL_DRAFT_KEY,
+      JSON.stringify({
+        title: title?.value || "",
+        html: mailEditor?.root?.innerHTML || "",
+      })
+    );
+  };
+
+  mailEditor.off && mailEditor.off("text-change", saveDraft);
+  mailEditor.on("text-change", saveDraft);
+  if (title && title.dataset.mailBound !== "true") {
+    title.dataset.mailBound = "true";
+    title.addEventListener("input", saveDraft);
+  }
+
+  const saveToDb = async (status) => {
+    if (!title || !mailEditor) return;
+    applyCooldown(status === "draft" ? draftBtn : finalBtn, 1000);
+    const payload = {
+      title: title.value.trim() || "Untitled",
+      body_html: mailEditor.root.innerHTML || "",
+      status,
+      updated_at: new Date().toISOString(),
+    };
+    try {
+      const { error } = await supabaseClient
+        .schema(DB_SCHEMA)
+        .from("mail_templates")
+        .insert(payload);
+      if (error) throw error;
+      showToast("success", status === "draft" ? "Draft saved." : "Final saved.");
+    } catch (err) {
+      console.error("mail save failed", err);
+      showToast("error", "Could not save mail content.");
+    }
+  };
+
+  if (draftBtn && draftBtn.dataset.mailBound !== "true") {
+    draftBtn.dataset.mailBound = "true";
+    draftBtn.addEventListener("click", () => saveToDb("draft"));
+  }
+  if (finalBtn && finalBtn.dataset.mailBound !== "true") {
+    finalBtn.dataset.mailBound = "true";
+    finalBtn.addEventListener("click", () => saveToDb("final"));
+  }
+
+  const templates = {
+    default: {
+      title: "Session Access",
+      html: `
+        <h2>Hello {Student_Name},</h2>
+        <p>Your session access token is <strong>{Session_Token}</strong>.</p>
+        <p>Course: {Course}<br/>Year Level: {Year_Level}<br/>Semester: {Semester}</p>
+        <p>Date: {Date} at {Time}</p>
+        <p>Open the portal: {Portal_Link}</p>
+      `,
+    },
+    access: {
+      title: "Your Access Token",
+      html: `
+        <p>Good day {Student_Name},</p>
+        <p>Please use this token to access your grades:</p>
+        <h3>{Session_Token}</h3>
+        <p>This token is tied to {Email} and your Student ID: {Student_ID}.</p>
+        <p>Portal link: {Portal_Link}</p>
+      `,
+    },
+    reminder: {
+      title: "Reminder: Access Your Grades",
+      html: `
+        <p>Hi {Student_Name},</p>
+        <p>This is a reminder to check your grades for {Course}.</p>
+        <p>Your access token: <strong>{Session_Token}</strong></p>
+        <p>Sent on {Date} at {Time}.</p>
+        <p>Portal link: {Portal_Link}</p>
+      `,
+    },
+    result: {
+      title: "Grades Available",
+      html: `
+        <p>Hello {Student_Name},</p>
+        <p>Your grades for {Course} ({Year_Level}, {Semester}) are now available.</p>
+        <p>Use your token <strong>{Session_Token}</strong> to view them.</p>
+        <p>Portal link: {Portal_Link}</p>
+      `,
+    },
+  };
+
+  templateButtons.forEach((btn) => {
+    if (btn.dataset.mailBound === "true") return;
+    btn.dataset.mailBound = "true";
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.template;
+      const tpl = templates[key];
+      if (!tpl || !mailEditor) return;
+      if (title) title.value = tpl.title;
+      mailEditor.clipboard.dangerouslyPasteHTML(tpl.html);
+      saveDraft();
+    });
+  });
+}
+
 async function init() {
-  loadLocalTokens();
   setupDarkModeToggle();
 
   const { data } = await supabaseClient.auth.getSession();
-  const guestToken = localStorage.getItem("elms_guest_token");
-
   if (loginScreen) {
-    if (data.session || guestToken) {
+    if (data.session) {
       window.location.href = "main.html";
       return;
     }
@@ -1555,14 +1968,8 @@ async function init() {
     return;
   }
 
-  if (!data.session && !guestToken) {
+  if (!data.session) {
     window.location.href = "index.html";
-    return;
-  }
-
-  if (guestToken && !data.session) {
-    currentUser = { role: "guest", token: guestToken };
-    showGuest();
     return;
   }
 
@@ -1916,27 +2323,35 @@ async function importSubjectsFromRows(rows) {
 
 function buildPreviewTable(headers, rows) {
   if (!headers.length) {
-    return `<div style="color:var(--muted);font-size:12px;">No data to preview.</div>`;
+    return `
+      <div class="empty-state" style="margin-top:12px;">
+        <i class="bx bx-compass"></i>
+        <div class="empty-title">Oops I think you're lost</div>
+        <div class="empty-sub">No data to preview.</div>
+      </div>
+    `;
   }
-  const bodyRows = rows
-    .map(
-      (r) => `
-      <tr>
-        ${headers
-          .map((h) => `<td>${r[h] ?? ""}</td>`)
-          .join("")}
-      </tr>
-    `
-    )
-    .join("");
+  const bodyRows = rows.length
+    ? rows
+        .map(
+          (r) => `
+        <tr>
+          ${headers
+            .map((h) => `<td>${r[h] ?? ""}</td>`)
+            .join("")}
+        </tr>
+      `
+        )
+        .join("")
+    : emptyTableRow(headers.length);
   return `
-    <div class="preview-table">
-      <table class="table">
-        <thead>
-          <tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr>
-        </thead>
-        <tbody>${bodyRows}</tbody>
-      </table>
-    </div>
-  `;
+      <div class="preview-table">
+        <table class="table">
+          <thead>
+            <tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr>
+          </thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </div>
+    `;
 }

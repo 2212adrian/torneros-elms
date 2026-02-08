@@ -8,6 +8,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.snow.css" rel="stylesheet" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -32,7 +34,7 @@
             </label>
             <!-- END ADDED -->
             <div class="profile-text">
-              <span class="profile-name">Dr. Torneros</span>
+              <span class="profile-name">Mr. Torneros</span>
               <span class="profile-status">Online</span>
             </div>
             <div class="avatar">T</div>
@@ -63,30 +65,31 @@
           </button>
         </nav>
 
-        <div id="more-drawer" class="drawer hidden">
-          <div class="drawer-panel">
-            <div class="drawer-header">
-              <h3>System Menu</h3>
-              <button id="close-drawer" class="icon-btn">X</button>
-            </div>
-            <div class="drawer-links">
-              <button class="drawer-link" data-view="dashboard">Dashboard</button>
-              <button class="drawer-link" data-view="analytics">Analytics</button>
-            </div>
-            <div class="drawer-footer">
-              <button id="logout-btn" class="danger-btn">Logout Session</button>
-            </div>
-          </div>
+        <div id="more-menu" class="more-menu hidden" aria-hidden="true">
+          <button class="more-item" data-view="dashboard">
+            <i class="bx bx-grid-alt"></i>
+            <span>Dashboard</span>
+          </button>
+          <button class="more-item" data-view="mail">
+            <i class="bx bx-envelope"></i>
+            <span>Mail Editor</span>
+          </button>
+          <div class="more-divider"></div>
+          <button id="logout-btn" class="more-item danger">
+            <i class="bx bx-log-out"></i>
+            <span>Logout Session</span>
+          </button>
         </div>
       </section>
 
-      <section id="guest-screen" class="screen hidden"></section>
     </div>
 
     <div id="modal-root" class="modal-root hidden"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="script.js"></script>
   </body>
