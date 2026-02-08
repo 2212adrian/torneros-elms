@@ -30,6 +30,7 @@ let subjectsData = [];
 let tokens = [];
 const masterlistState = { page: 1, pageSize: 10, query: "" };
 const gradingState = { page: 1, pageSize: 10, query: "", yearLevel: "", semester: "" };
+const fetchDebug = { students: { fetched: 0, visible: 0 } };
 
 const sections = ["BSIT-3B", "BSIT-3A", "BSCS-2A"];
 const subjects = [
@@ -45,6 +46,38 @@ const subjects = [
 ];
 const schoolYears = ["2023-2024", "2024-2025", "2025-2026"];
 const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
+const DARK_MODE_KEY = "elms_dark_mode";
+
+function applyTheme(isDark) {
+  if (isDark) {
+    document.body.classList.add("dark-mode");
+    localStorage.setItem(DARK_MODE_KEY, "dark");
+  } else {
+    document.body.classList.remove("dark-mode");
+    localStorage.setItem(DARK_MODE_KEY, "light");
+  }
+}
+
+function toggleDarkMode() {
+  const isDark = document.body.classList.contains("dark-mode");
+  applyTheme(!isDark);
+}
+
+function setupDarkModeToggle() {
+  const toggle = document.getElementById("dark-mode-toggle");
+  if (toggle) {
+    // Initialize from localStorage or system preference
+    const savedMode = localStorage.getItem(DARK_MODE_KEY);
+    const initialDark = savedMode === "dark" || (!savedMode && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    applyTheme(initialDark);
+    
+    // Set checkbox state
+    toggle.checked = initialDark;
+
+    // Add listener
+    toggle.addEventListener("change", toggleDarkMode);
+  }
+}
 
 function randomUUID() {
   if (crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -73,16 +106,23 @@ function saveLocalTokens() {
 }
 
 async function fetchStudents() {
-  const { data, error } = await supabaseClient
+  const { data: allRows, error } = await supabaseClient
     .schema(DB_SCHEMA)
     .from("students")
     .select("*")
-    .is("deleted_at", null)
     .order("created_at", { ascending: true });
   if (error) {
     console.error("fetchStudents error", error);
     throw error;
   }
+  const rows = allRows || [];
+  const visibleRows = rows.filter((r) => r.deleted_at == null);
+  const data = visibleRows.length > 0 ? visibleRows : rows;
+  fetchDebug.students = {
+    fetched: rows.length,
+    visible: visibleRows.length,
+  };
+
   students = data.map((s) => ({
     id: s.id,
     idCode: s.student_id,
@@ -107,6 +147,7 @@ async function fetchSubjects() {
     console.error("fetchSubjects error", error);
     throw error;
   }
+
   subjectsData = data.map((s) => ({
     id: s.id,
     subjectName: s.subject_name,
@@ -116,7 +157,7 @@ async function fetchSubjects() {
     prefinal: s.prefinal,
     finals: s.finals,
     average: s.average,
-    gpa: s.gpa,
+    gwa: s.gwa,
     remarks: s.remarks,
     yearLevel: s.year_level,
     semester: s.semester,
@@ -168,7 +209,7 @@ async function upsertSubjects(records) {
       prefinal: s.prefinal ?? null,
       finals: s.finals ?? null,
       average: s.average ?? null,
-      gpa: s.gpa ?? null,
+      gwa: s.gwa ?? null,
       remarks: s.remarks ?? null,
       year_level: s.yearLevel ?? null,
       semester: s.semester ?? null,
@@ -196,7 +237,7 @@ async function upsertGrades(records) {
       prefinal: g.prefinal,
       finals: g.finals,
       average: g.average ?? null,
-      gpa: g.gpa ?? null,
+      gwa: g.gwa ?? null,
       remarks: g.remarks ?? null,
       school_year: g.schoolYear ?? null,
       semester: g.semester ?? null,
@@ -444,16 +485,19 @@ function renderMasterlist() {
     <section class="section">
       <h2>Student Masterlist</h2>
       <p>Comprehensive student data and record management.</p>
+      <p class="debug-pill">
+        Debug: fetched ${fetchDebug.students.fetched} · visible ${fetchDebug.students.visible} · showing ${students.length}
+      </p>
     </section>
     <div class="section card">
       <div class="grid-2">
         <input id="student-search" class="input" placeholder="Search by ID, Name or Section..." />
         <div style="display:flex;gap:10px;justify-content:flex-end;">
-          <button class="btn ghost" id="clear-students">Clear All</button>
         </div>
       </div>
-      <div style="margin-top:20px;overflow:auto;">
-        <table class="table">
+      <div class="table-wrap">
+        <div class="table-scroll">
+          <table class="table">
           <thead>
             <tr>
               <th>Student ID</th>
@@ -467,12 +511,13 @@ function renderMasterlist() {
             </tr>
           </thead>
           <tbody id="student-rows"></tbody>
-        </table>
-        <div class="pager" id="student-pager">
-          <button class="btn ghost" id="student-prev">Prev</button>
-          <span class="pager-info" id="student-page-info"></span>
-          <button class="btn ghost" id="student-next">Next</button>
+          </table>
         </div>
+      </div>
+      <div class="pager" id="student-pager">
+        <button class="btn ghost" id="student-prev">Prev</button>
+        <span class="pager-info" id="student-page-info"></span>
+        <button class="btn ghost" id="student-next">Next</button>
       </div>
     </div>
   `;
@@ -504,33 +549,30 @@ function renderGrades() {
           </select>
         </div>
         <div style="display:flex;gap:10px;justify-content:flex-end;">
-          <button class="btn ghost" id="clear-grades">Reset</button>
         </div>
       </div>
-      <div style="margin-top:20px;overflow:auto;">
-        <table class="table">
+      <div class="table-wrap">
+        <div class="table-scroll">
+          <table class="table">
           <thead>
             <tr>
               <th>subject_name</th>
               <th>student_name</th>
-              <th>prelim</th>
-              <th>midterm</th>
-              <th>prefinal</th>
-              <th>finals</th>
               <th>average</th>
-              <th>gpa</th>
+              <th>gwa</th>
               <th>remarks</th>
               <th>year_level</th>
               <th>semester</th>
             </tr>
           </thead>
           <tbody id="grade-rows"></tbody>
-        </table>
-        <div class="pager" id="grade-pager">
-          <button class="btn ghost" id="grade-prev">Prev</button>
-          <span class="pager-info" id="grade-page-info"></span>
-          <button class="btn ghost" id="grade-next">Next</button>
+          </table>
         </div>
+      </div>
+      <div class="pager" id="grade-pager">
+        <button class="btn ghost" id="grade-prev">Prev</button>
+        <span class="pager-info" id="grade-page-info"></span>
+        <button class="btn ghost" id="grade-next">Next</button>
       </div>
     </div>
   `;
@@ -563,6 +605,8 @@ function renderTokens() {
         </div>
         <button class="btn primary" id="publish-selected" style="margin-top:12px;">Publish Selected</button>
         <button class="btn ghost" id="publish-all" style="margin-top:8px;">Publish All</button>
+        <div style="height:12px;"></div>
+        <button class="btn indigo" id="send-tokens" style="margin-top:6px;">Send Tokens to All Emails</button>
       </div>
       <div class="card">
         <h3>Active Keys</h3>
@@ -781,13 +825,6 @@ function bindMasterlistActions() {
   });
   renderStudentRows();
 
-  document.getElementById("clear-students").onclick = async () => {
-    await softDeleteAll("grades");
-    await softDeleteAll("students");
-    students = [];
-    grades = [];
-    await refreshAndRender("masterlist");
-  };
 }
 
 function bindGradeActions() {
@@ -865,12 +902,22 @@ function bindGradeActions() {
           <tr>
             <td>${s.subjectName || ""}</td>
             <td>${s.studentName || ""}</td>
-            <td>${gradeChip(s.prelim)}</td>
-            <td>${gradeChip(s.midterm)}</td>
-            <td>${gradeChip(s.prefinal)}</td>
-            <td>${gradeChip(s.finals)}</td>
-            <td>${colorBadge(s.average)}</td>
-            <td>${colorBadge(s.gpa, true)}</td>
+            <td>
+              <span class="avg-tooltip">
+                <span class="avg-wrap">
+                  ${colorBadge(s.average)}
+                  <span class="avg-line"></span>
+                </span>
+                <span class="avg-tooltip-card">
+                  <span class="avg-title">Grade Breakdown</span>
+                  <span class="avg-row"><span>Prelim</span><strong>${s.prelim ?? "-"}</strong></span>
+                  <span class="avg-row"><span>Midterm</span><strong>${s.midterm ?? "-"}</strong></span>
+                  <span class="avg-row"><span>Prefinal</span><strong>${s.prefinal ?? "-"}</strong></span>
+                  <span class="avg-row"><span>Finals</span><strong>${s.finals ?? "-"}</strong></span>
+                </span>
+              </span>
+            </td>
+            <td>${colorBadge(s.gwa, true)}</td>
             <td>${remarksChip}</td>
             <td>${s.yearLevel || ""}</td>
             <td>${s.semester || ""}</td>
@@ -908,11 +955,15 @@ function bindGradeActions() {
   });
   renderGradeRows();
 
-  document.getElementById("clear-grades").onclick = async () => {
-    await softDeleteAll("subjects");
-    grades = [];
-    await refreshAndRender("grading");
-  };
+
+  rows.addEventListener("click", (e) => {
+    const tooltip = e.target.closest(".avg-tooltip");
+    if (!tooltip) return;
+    rows.querySelectorAll(".avg-tooltip.active").forEach((el) => {
+      if (el !== tooltip) el.classList.remove("active");
+    });
+    tooltip.classList.toggle("active");
+  });
 }
 
 function bindTokenActions() {
@@ -950,9 +1001,56 @@ function bindTokenActions() {
     saveLocalTokens();
     renderView("tokens");
   };
+
+  const sendBtn = document.getElementById("send-tokens");
+  if (sendBtn) {
+    sendBtn.onclick = async () => {
+      const sessionResult = await supabaseClient.auth.getSession();
+      if (!sessionResult.data.session) {
+        Swal.fire({
+          icon: "warning",
+          title: "Login required",
+          text: "Please login first before sending tokens.",
+        });
+        return;
+      }
+      sendBtn.disabled = true;
+      sendBtn.textContent = "Sending...";
+      try {
+        const resp = await fetch("/.netlify/functions/send-tokens", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "reuse" }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data?.error || "Send failed");
+        Swal.fire({
+          icon: "success",
+          title: "Emails sent",
+          text: data?.message || "Tokens were sent to all student emails.",
+        });
+      } catch (err) {
+        Swal.fire({
+          icon: "error",
+          title: "Send failed",
+          text: err?.message || "Could not send tokens.",
+        });
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = "Send Tokens to All Emails";
+      }
+    };
+  }
 }
 
-let importCache = { studentsText: "", subjectsText: "" };
+let importCache = {
+  studentsText: "",
+  subjectsText: "",
+  studentsData: null,
+  subjectsData: null,
+  hasFile: false,
+  activeTab: "students",
+};
 
 function openImportCenter() {
   if (!supabaseClient.auth.getSession) {
@@ -963,31 +1061,47 @@ function openImportCenter() {
     });
     return;
   }
-  importCache = { studentsText: "", subjectsText: "" };
+  importCache = {
+    studentsText: "",
+    subjectsText: "",
+    studentsData: null,
+    subjectsData: null,
+    hasFile: false,
+    activeTab: "students",
+  };
   modalRoot.classList.remove("hidden");
   modalRoot.innerHTML = `
-    <div class="modal">
-      <h3>Import Excel</h3>
-      <p style="color:var(--muted);font-size:12px;margin-top:6px;">
-        Choose where to import and whether to overwrite or stack rows.
-      </p>
-      <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <select id="import-target" class="input">
-          <option value="students">Masterlist (Students)</option>
-          <option value="grades">Grading (Subjects)</option>
-          <option value="both">Both</option>
-        </select>
-        <select id="import-mode" class="input">
-          <option value="stack">Stack rows (append)</option>
-          <option value="overwrite">Overwrite (clear then import)</option>
-        </select>
+    <div class="modal import-modal">
+      <div class="modal-body">
+        <h3>Import Excel</h3>
+        <p style="color:var(--muted);font-size:12px;margin-top:6px;">
+          Choose where to import and whether to overwrite or stack rows.
+        </p>
+        <div class="import-drop">
+          <input type="file" id="import-file" accept=".xlsx,.xls" />
+        </div>
+        <div class="import-panel">
+          <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <select id="import-target" class="input">
+            <option value="students">Masterlist (Students)</option>
+            <option value="grades">Grading (Subjects)</option>
+            <option value="both">Both</option>
+          </select>
+            <div class="import-switch" id="import-switch">
+              <span class="switch-label left active" id="mode-label-left">Add</span>
+              <label class="switch">
+                <input type="checkbox" id="import-mode-toggle" />
+                <span class="slider"></span>
+              </label>
+              <span class="switch-label right" id="mode-label-right">New</span>
+            </div>
+          </div>
+          <div id="import-filters" class="import-filters"></div>
+          <div id="import-tabs" class="import-tabs"></div>
+          <div id="import-text-wrap" class="import-preview"></div>
+        </div>
       </div>
-      <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-        <input type="file" id="import-file" accept=".xlsx,.xls" />
-        <button class="btn ghost" id="read-file">Read Excel</button>
-      </div>
-      <div id="import-text-wrap" style="margin-top:12px;"></div>
-      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;">
+      <div class="modal-actions">
         <button class="btn ghost" id="cancel-import">Cancel</button>
         <button class="btn primary" id="process-import">Process</button>
       </div>
@@ -995,29 +1109,172 @@ function openImportCenter() {
   `;
 
   const targetSelect = document.getElementById("import-target");
-  const wrap = document.getElementById("import-text-wrap");
+  const importFile = document.getElementById("import-file");
 
-  function renderTextareas() {
+  function setImportReady() {
+    modalRoot.querySelector(".modal").classList.add("import-ready");
+  }
+
+  function renderTabs() {
+    const tabWrap = document.getElementById("import-tabs");
+    if (targetSelect.value !== "both") {
+      tabWrap.innerHTML = "";
+      return;
+    }
+    tabWrap.innerHTML = `
+      <button class="tab-btn ${importCache.activeTab === "students" ? "active" : ""}" data-tab="students">Masterlist</button>
+      <button class="tab-btn ${importCache.activeTab === "grades" ? "active" : ""}" data-tab="grades">Grading</button>
+    `;
+    tabWrap.querySelectorAll(".tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        importCache.activeTab = btn.dataset.tab;
+        renderPreview();
+      });
+    });
+  }
+
+  function renderFilters() {
+    const filterWrap = document.getElementById("import-filters");
     const target = targetSelect.value;
-    if (target === "both") {
-      wrap.innerHTML = `
-        <label style="font-size:12px;color:var(--muted);">Students (tab-separated)</label>
-        <textarea id="import-text-students" class="input" style="height:160px;"></textarea>
-        <label style="font-size:12px;color:var(--muted);margin-top:10px;">Subjects (tab-separated)</label>
-        <textarea id="import-text-grades" class="input" style="height:160px;"></textarea>
-      `;
+    const parts = [];
+    if (target === "students" || target === "both") {
+      const genders = Array.from(
+        new Set((importCache.studentsData?.rows || []).map((r) => r.gender).filter(Boolean))
+      );
+      const courses = Array.from(
+        new Set((importCache.studentsData?.rows || []).map((r) => r.course).filter(Boolean))
+      );
+      parts.push(`
+        <div class="filter-group">
+          <select id="filter-gender" class="input">
+            <option value="">All Genders</option>
+            ${genders.map((g) => `<option value="${g}">${g}</option>`).join("")}
+          </select>
+          <select id="filter-course" class="input">
+            <option value="">All Courses</option>
+            ${courses.map((c) => `<option value="${c}">${c}</option>`).join("")}
+          </select>
+        </div>
+      `);
+    }
+    if (target === "grades" || target === "both") {
+      const subjects = Array.from(
+        new Set((importCache.subjectsData?.rows || []).map((r) => r.subject_name).filter(Boolean))
+      );
+      const years = Array.from(
+        new Set((importCache.subjectsData?.rows || []).map((r) => r.year_level).filter(Boolean))
+      );
+      const semesters = Array.from(
+        new Set((importCache.subjectsData?.rows || []).map((r) => r.semester).filter(Boolean))
+      );
+      parts.push(`
+        <div class="filter-group">
+          <select id="filter-subject" class="input">
+            <option value="">All Subjects</option>
+            ${subjects.map((s) => `<option value="${s}">${s}</option>`).join("")}
+          </select>
+          <select id="filter-year" class="input">
+            <option value="">All Year Levels</option>
+            ${years.map((y) => `<option value="${y}">${y}</option>`).join("")}
+          </select>
+          <select id="filter-semester" class="input">
+            <option value="">All Semesters</option>
+            ${semesters.map((s) => `<option value="${s}">${s}</option>`).join("")}
+          </select>
+        </div>
+      `);
+    }
+    filterWrap.innerHTML = parts.join("");
+
+    filterWrap.querySelectorAll("select").forEach((sel) => {
+      sel.addEventListener("change", renderPreview);
+    });
+  }
+
+  function renderPreview() {
+    const target = targetSelect.value;
+    const wrap = document.getElementById("import-text-wrap");
+    const active = target === "both" ? importCache.activeTab : target;
+    if (!importCache.hasFile) {
+      wrap.innerHTML = "";
+      return;
+    }
+    if (active === "students") {
+      const gender = document.getElementById("filter-gender")?.value || "";
+      const course = document.getElementById("filter-course")?.value || "";
+      const data = importCache.studentsData?.rows || [];
+      const rows = data.filter((r) => {
+        const okGender = !gender || r.gender === gender;
+        const okCourse = !course || r.course === course;
+        return okGender && okCourse;
+      });
+      wrap.innerHTML = buildPreviewTable(importCache.studentsData?.headers || [], rows);
     } else {
-      wrap.innerHTML = `
-        <textarea id="import-text" class="input" style="height:200px;"></textarea>
-      `;
+      const subject = document.getElementById("filter-subject")?.value || "";
+      const year = document.getElementById("filter-year")?.value || "";
+      const semester = document.getElementById("filter-semester")?.value || "";
+      const data = importCache.subjectsData?.rows || [];
+      const rows = data.filter((r) => {
+        const okSubject = !subject || r.subject_name === subject;
+        const okYear = !year || r.year_level === year;
+        const okSemester = !semester || r.semester === semester;
+        return okSubject && okYear && okSemester;
+      });
+      wrap.innerHTML = buildPreviewTable(importCache.subjectsData?.headers || [], rows);
     }
   }
 
-  renderTextareas();
-  targetSelect.addEventListener("change", renderTextareas);
+  function updateImportUI() {
+    renderTabs();
+    renderFilters();
+    renderPreview();
+  }
 
-  document.getElementById("cancel-import").onclick = closeModal;
-  document.getElementById("read-file").onclick = () => readExcelFile(targetSelect.value);
+  targetSelect.addEventListener("change", () => {
+    if (targetSelect.value !== "both") {
+      importCache.activeTab = targetSelect.value;
+    }
+    updateImportUI();
+  });
+
+  importFile.addEventListener("change", () => {
+    readExcelFile(targetSelect.value);
+    setImportReady();
+  });
+
+  const modal = modalRoot.querySelector(".modal");
+  if (modal) {
+    modal.addEventListener("import-data-ready", updateImportUI);
+  }
+
+  document.getElementById("cancel-import").onclick = () => {
+    if (!importCache.hasFile) {
+      closeModal();
+      return;
+    }
+    Swal.fire({
+      icon: "warning",
+      title: "Discard upload?",
+      text: "You have already uploaded a file. Canceling will discard the preview.",
+      showCancelButton: true,
+      confirmButtonText: "Discard",
+    }).then((result) => {
+      if (result.isConfirmed) closeModal();
+    });
+  };
+
+  document.getElementById("import-mode-toggle").addEventListener("change", (e) => {
+    const left = document.getElementById("mode-label-left");
+    const right = document.getElementById("mode-label-right");
+    if (e.target.checked) {
+      left.classList.remove("active");
+      right.classList.add("active");
+    } else {
+      right.classList.remove("active");
+      left.classList.add("active");
+    }
+  });
+
   document.getElementById("process-import").onclick = async () => {
     const sessionResult = await supabaseClient.auth.getSession();
     if (!sessionResult.data.session) {
@@ -1029,38 +1286,50 @@ function openImportCenter() {
       return;
     }
 
-    const mode = document.getElementById("import-mode").value;
+    const mode = document.getElementById("import-mode-toggle").checked
+      ? "overwrite"
+      : "stack";
     const target = targetSelect.value;
 
     try {
       if (mode === "overwrite") {
         if (target === "students" || target === "both") {
-          await softDeleteAll("students");
+          const { error: delErr } = await supabaseClient
+            .schema(DB_SCHEMA)
+            .from("students")
+            .delete()
+            .not("id", "is", null);
+          if (delErr) throw delErr;
         }
         if (target === "grades" || target === "both") {
-          await softDeleteAll("subjects");
+          const { error: delErr } = await supabaseClient
+            .schema(DB_SCHEMA)
+            .from("subjects")
+            .delete()
+            .not("id", "is", null);
+          if (delErr) throw delErr;
         }
       }
 
+      if (!importCache.hasFile) {
+        showImportError("Please select an Excel file first.");
+        return;
+      }
+
       if (target === "students") {
-        const data = document.getElementById("import-text").value.trim();
-        if (!data) return;
-        await importStudentsFromText(data);
+        await importStudentsFromRows(importCache.studentsData?.rows || []);
         await refreshAndRender("masterlist");
       } else if (target === "grades") {
-        const data = document.getElementById("import-text").value.trim();
-        if (!data) return;
-        await importSubjectsFromText(data);
+        await importSubjectsFromRows(importCache.subjectsData?.rows || []);
         await refreshAndRender("grading");
       } else {
-        const studentText = (document.getElementById("import-text-students")?.value || "").trim();
-        const subjectText = (document.getElementById("import-text-grades")?.value || "").trim();
-        if (studentText) await importStudentsFromText(studentText);
-        if (subjectText) await importSubjectsFromText(subjectText);
+        await importStudentsFromRows(importCache.studentsData?.rows || []);
+        await importSubjectsFromRows(importCache.subjectsData?.rows || []);
         await refreshAndRender("dashboard");
       }
 
       closeModal();
+      showImportSuccess();
     } catch (err) {
       console.error("Import failed", err);
       Swal.fire({
@@ -1089,7 +1358,7 @@ function openImportModal(type) {
         Paste tab-separated rows.
         ${type === "students"
           ? "Unified format: Student ID, Full Name, Gender, Birthdate, Age, Course, Contact Number, Email"
-          : "Unified format: Subject Name, Student Name, Prelim, Midterm, Prefinal, Finals, Average, GPA, Remarks, Year Level, Semester"}
+          : "Unified format: Subject Name, Student Name, Prelim, Midterm, Prefinal, Finals, Average, GWA, Remarks, Year Level, Semester"}
       </p>
       <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <input type="file" id="import-file" accept=".xlsx,.xls" />
@@ -1180,6 +1449,8 @@ function bindMainEvents() {
 
 async function init() {
   loadLocalTokens();
+  setupDarkModeToggle();
+
   const { data } = await supabaseClient.auth.getSession();
   const guestToken = localStorage.getItem("elms_guest_token");
 
@@ -1246,21 +1517,18 @@ function readExcelFile(type) {
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: "array" });
 
-      const studentsText = extractStudentsText(workbook);
-      const subjectsText = extractSubjectsText(workbook);
-      importCache = { studentsText, subjectsText };
+      const studentsData = extractStudentsData(workbook);
+      const subjectsData = extractSubjectsData(workbook);
+      importCache.studentsData = studentsData;
+      importCache.subjectsData = subjectsData;
+      importCache.studentsText = studentsData.text || "";
+      importCache.subjectsText = subjectsData.text || "";
+      importCache.hasFile = true;
 
-      if (type === "both") {
-        const studentBox = document.getElementById("import-text-students");
-        const subjectBox = document.getElementById("import-text-grades");
-        if (studentBox) studentBox.value = studentsText;
-        if (subjectBox) subjectBox.value = subjectsText;
-      } else if (type === "students") {
-        const target = document.getElementById("import-text");
-        if (target) target.value = studentsText;
-      } else {
-        const target = document.getElementById("import-text");
-        if (target) target.value = subjectsText;
+      const modal = modalRoot.querySelector(".modal");
+      if (modal) {
+        const updateEvent = new Event("import-data-ready");
+        modal.dispatchEvent(updateEvent);
       }
     } catch (err) {
       showImportError("Could not read this Excel file.");
@@ -1269,11 +1537,48 @@ function readExcelFile(type) {
   reader.readAsArrayBuffer(file);
 }
 
-function extractStudentsText(workbook) {
+function showImportSuccess() {
+  const confetti = document.createElement("div");
+  confetti.className = "confetti";
+  const colors = ["#4f46e5", "#22c55e", "#f59e0b", "#ef4444", "#0ea5e9"];
+  for (let i = 0; i < 40; i++) {
+    const piece = document.createElement("div");
+    piece.className = "confetti-piece";
+    piece.style.left = `${Math.random() * 100}%`;
+    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.animationDelay = `${Math.random() * 0.2}s`;
+    piece.style.transform = `rotate(${Math.random() * 360}deg)`;
+    confetti.appendChild(piece);
+  }
+  document.body.appendChild(confetti);
+  setTimeout(() => confetti.remove(), 1500);
+
+  Swal.fire({
+    html: `
+      <div class="success-modal">
+        <div class="success-check">
+          <svg viewBox="0 0 52 52">
+            <path d="M14 27 L23 36 L39 18"></path>
+          </svg>
+        </div>
+        <div style="font-weight:700;font-size:18px;">Import Successful</div>
+        <div style="color:var(--muted);font-size:12px;margin-top:6px;">Your records are now up to date.</div>
+      </div>
+    `,
+    showConfirmButton: true,
+    confirmButtonText: "OK",
+    customClass: {
+      popup: "modal success-popup",
+      confirmButton: "btn primary",
+    },
+  });
+}
+
+function extractStudentsData(workbook) {
   const sheet = workbook.Sheets["Students"];
   if (!sheet) {
     showImportError('Students sheet not found. Only "Students" sheet is allowed for Masterlist.');
-    return "";
+    return { headers: [], rows: [], text: "" };
   }
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
   const [headerRow, ...dataRows] = rows;
@@ -1282,9 +1587,10 @@ function extractStudentsText(workbook) {
   const missing = required.filter((r) => headers[r] === undefined);
   if (missing.length) {
     showImportError(`Missing columns: ${missing.join(", ")}`);
-    return "";
+    return { headers: [], rows: [], text: "" };
   }
   const textRows = [];
+  const outRows = [];
   for (const r of dataRows) {
     const studentId = r[headers["student_id"]];
     const fullName = r[headers["fullname"]];
@@ -1316,6 +1622,16 @@ function extractStudentsText(workbook) {
       continue;
     }
 
+    outRows.push({
+      student_id: studentId,
+      full_name: fullName,
+      gender,
+      birthdate,
+      age,
+      course,
+      contact_number: contactNumber,
+      email,
+    });
     textRows.push([
       studentId,
       fullName,
@@ -1327,14 +1643,27 @@ function extractStudentsText(workbook) {
       email,
     ].join("\t"));
   }
-  return textRows.join("\n");
+  return {
+    headers: [
+      "student_id",
+      "full_name",
+      "gender",
+      "birthdate",
+      "age",
+      "course",
+      "contact_number",
+      "email",
+    ],
+    rows: outRows,
+    text: textRows.join("\n"),
+  };
 }
 
-function extractSubjectsText(workbook) {
+function extractSubjectsData(workbook) {
   const sheet = workbook.Sheets["Subjects"];
   if (!sheet) {
     showImportError('Subjects sheet not found. Only "Subjects" sheet is allowed for Grading.');
-    return "";
+    return { headers: [], rows: [], text: "" };
   }
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
   const [headerRow, ...dataRows] = rows;
@@ -1343,26 +1672,57 @@ function extractSubjectsText(workbook) {
   const missing = required.filter((r) => headers[r] === undefined);
   if (missing.length) {
     showImportError(`Missing columns: ${missing.join(", ")}`);
-    return "";
+    return { headers: [], rows: [], text: "" };
   }
-  return dataRows
+  const outRows = [];
+  const textRows = dataRows
     .filter((r) => r[headers["subject_name"]])
-    .map((r) =>
-      [
-        r[headers["subject_name"]],
-        r[headers["student_name"]] || "",
-        r[headers["prelim"]] || "",
-        r[headers["midterm"]] || "",
-        r[headers["prefinal"]] || "",
-        r[headers["finals"]] || "",
-        r[headers["average"]] || "",
-        r[headers["gpa"]] || "",
-        r[headers["remarks"]] || "",
-        r[headers["year_level"]] || "",
-        r[headers["semester"]] || "",
-      ].join("\t")
-    )
-    .join("\n");
+    .map((r) => {
+      const row = {
+        subject_name: r[headers["subject_name"]],
+        student_name: r[headers["student_name"]] || "",
+        prelim: r[headers["prelim"]] || "",
+        midterm: r[headers["midterm"]] || "",
+        prefinal: r[headers["prefinal"]] || "",
+        finals: r[headers["finals"]] || "",
+        average: r[headers["average"]] || "",
+        gwa: r[headers["gwa"]] || "",
+        remarks: r[headers["remarks"]] || "",
+        year_level: r[headers["year_level"]] || "",
+        semester: r[headers["semester"]] || "",
+      };
+      outRows.push(row);
+      return [
+        row.subject_name,
+        row.student_name,
+        row.prelim,
+        row.midterm,
+        row.prefinal,
+        row.finals,
+        row.average,
+        row.gwa,
+        row.remarks,
+        row.year_level,
+        row.semester,
+      ].join("\t");
+    });
+  return {
+    headers: [
+      "subject_name",
+      "student_name",
+      "prelim",
+      "midterm",
+      "prefinal",
+      "finals",
+      "average",
+      "gwa",
+      "remarks",
+      "year_level",
+      "semester",
+    ],
+    rows: outRows,
+    text: textRows.join("\n"),
+  };
 }
 
 async function importStudentsFromText(data) {
@@ -1399,7 +1759,7 @@ async function importSubjectsFromText(data) {
         prefinal,
         finals,
         average,
-        gpa,
+        gwa,
         remarks,
         yearLevel,
         semester,
@@ -1412,7 +1772,7 @@ async function importSubjectsFromText(data) {
         prefinal: prefinal !== undefined && prefinal !== "" ? Number(prefinal) : null,
         finals: finals !== undefined && finals !== "" ? Number(finals) : null,
         average: average !== undefined && average !== "" ? Number(average) : null,
-        gpa: gpa !== undefined && gpa !== "" ? Number(gpa) : null,
+        gwa: gwa !== undefined && gwa !== "" ? Number(gwa) : null,
         remarks: (remarks || "").trim() || null,
         yearLevel: (yearLevel || "").trim() || null,
         semester: (semester || "").trim() || null,
@@ -1421,4 +1781,70 @@ async function importSubjectsFromText(data) {
     .filter((g) => g.subjectName);
 
   await upsertSubjects(rawGrades);
+}
+
+async function importStudentsFromRows(rows) {
+  if (!rows.length) return;
+  const newStudents = rows
+    .map((r) => ({
+      idCode:
+        (r.student_id || "").trim() ||
+        (Math.floor(100000 + Math.random() * 900000)).toString(),
+      fullName: (r.full_name || "").trim(),
+      gender: r.gender || null,
+      birthdate: r.birthdate || null,
+      course: r.course || null,
+      age: r.age || null,
+      contactNumber: r.contact_number || null,
+      email: r.email || null,
+    }))
+    .filter((s) => s.fullName);
+  await upsertStudents(newStudents);
+}
+
+async function importSubjectsFromRows(rows) {
+  if (!rows.length) return;
+  const payload = rows
+    .map((r) => ({
+      subjectName: (r.subject_name || "").trim(),
+      studentName: (r.student_name || "").trim(),
+      prelim: r.prelim !== "" ? Number(r.prelim) : null,
+      midterm: r.midterm !== "" ? Number(r.midterm) : null,
+      prefinal: r.prefinal !== "" ? Number(r.prefinal) : null,
+      finals: r.finals !== "" ? Number(r.finals) : null,
+      average: r.average !== "" ? Number(r.average) : null,
+      gwa: r.gwa !== "" ? Number(r.gwa) : null,
+      remarks: (r.remarks || "").trim() || null,
+      yearLevel: (r.year_level || "").trim() || null,
+      semester: (r.semester || "").trim() || null,
+    }))
+    .filter((g) => g.subjectName);
+  await upsertSubjects(payload);
+}
+
+function buildPreviewTable(headers, rows) {
+  if (!headers.length) {
+    return `<div style="color:var(--muted);font-size:12px;">No data to preview.</div>`;
+  }
+  const bodyRows = rows
+    .map(
+      (r) => `
+      <tr>
+        ${headers
+          .map((h) => `<td>${r[h] ?? ""}</td>`)
+          .join("")}
+      </tr>
+    `
+    )
+    .join("");
+  return `
+    <div class="preview-table">
+      <table class="table">
+        <thead>
+          <tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr>
+        </thead>
+        <tbody>${bodyRows}</tbody>
+      </table>
+    </div>
+  `;
 }

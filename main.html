@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -21,6 +22,15 @@
             </div>
           </div>
           <div class="profile">
+            <!-- ADDED DARK MODE TOGGLE HERE -->
+            <label class="switch-toggle">
+              <input type="checkbox" id="dark-mode-toggle" />
+              <span class="slider-toggle">
+                <i class="bx bx-sun sun-icon"></i>
+                <i class="bx bx-moon moon-icon"></i>
+              </span>
+            </label>
+            <!-- END ADDED -->
             <div class="profile-text">
               <span class="profile-name">Dr. Torneros</span>
               <span class="profile-status">Online</span>
@@ -32,11 +42,25 @@
         <main id="teacher-content" class="content"></main>
 
         <nav class="bottom-nav">
-          <button class="nav-btn" data-view="masterlist">Masterlist</button>
-          <button class="nav-btn" data-view="grading">Grading</button>
-          <button class="nav-btn" data-view="import">Import</button>
-          <button class="nav-btn" data-view="tokens">Tokens</button>
-          <button class="nav-btn" data-view="more">More</button>
+          <button class="nav-btn import-fab" data-view="import" aria-label="Import">
+            <i class="bx bx-cloud-upload import-icon"></i>
+          </button>
+          <button class="nav-btn" data-view="masterlist">
+            <i class="bx bx-group nav-icon"></i>
+            <span class="nav-label">Masterlist</span>
+          </button>
+          <button class="nav-btn" data-view="grading">
+            <i class="bx bx-spreadsheet nav-icon"></i>
+            <span class="nav-label">Grading</span>
+          </button>
+          <button class="nav-btn" data-view="tokens">
+            <i class="bx bx-key nav-icon"></i>
+            <span class="nav-label">Tokens</span>
+          </button>
+          <button class="nav-btn" data-view="more">
+            <i class="bx bx-dots-horizontal-rounded nav-icon"></i>
+            <span class="nav-label">More</span>
+          </button>
         </nav>
 
         <div id="more-drawer" class="drawer hidden">
