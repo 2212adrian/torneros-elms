@@ -1,7 +1,7 @@
 const nodemailer = require("nodemailer");
 const { createClient } = require("@supabase/supabase-js");
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.SUPABASE_DATABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
@@ -175,6 +175,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         message: "Tokens generated and emails sent.",
         sent,
+        portalLink: PORTAL_LINK,
       }),
     };
   } catch (err) {

@@ -719,9 +719,7 @@ function renderGrades() {
 }
 
 function renderTokens() {
-  const available = students.filter(
-    (s) => !tokens.some((t) => t.studentIdCode === s.idCode)
-  );
+  const available = students;
   const showSelected = tokenMode !== "all";
   return `
     <section class="section">
@@ -729,53 +727,78 @@ function renderTokens() {
       <p>Generate student keys in the standard XXXX-XXXX-XXXX-XXXX format.</p>
     </section>
     <div class="section grid-2">
-      <div class="card">
-        <h3>Issue Keys</h3>
-        <p style="color:var(--muted);">Select students below then publish.</p>
-        <div style="display:flex;gap:10px;margin-top:12px;">
-          <button class="btn ${showSelected ? "primary" : "ghost"}" id="mode-selected">Publish Selected</button>
-          <button class="btn ${!showSelected ? "primary" : "ghost"}" id="mode-all">Publish All</button>
-        </div>
-        ${showSelected ? `
-          <input id="token-search" class="input" placeholder="Search student..." style="margin-top:12px;" />
-          <div id="token-student-list" class="token-list">
-            ${available
-              .slice(0, 15)
-              .map(
-                (s) => `
-                <label style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-                  <input type="checkbox" value="${s.idCode}" />
-                  <span>${s.fullName} (${s.idCode})</span>
-                </label>
-              `
-              )
-              .join("")}
+        <div class="card">
+          <h3>Issue Keys</h3>
+          <p style="color:var(--muted);">Select students below then publish.</p>
+          <div style="display:flex;gap:10px;margin-top:12px;">
+            <button class="btn ${showSelected ? "primary" : "ghost"}" id="mode-selected">Publish Selected</button>
+            <button class="btn ${!showSelected ? "primary" : "ghost"}" id="mode-all">Publish All</button>
           </div>
-        ` : ""}
-        <div style="height:12px;"></div>
-        <button class="btn indigo" id="send-tokens" style="margin-top:6px;">Send Tokens to All Emails</button>
-      </div>
-      <div class="card">
-        <h3>Active Keys</h3>
-        <div style="margin-top:12px;display:grid;gap:10px;">
-          ${
-            tokens.length
-              ? tokens
-                  .map(
-                    (t) => `
-                    <div class="glass" style="padding:14px;border-radius:18px;">
-                      <div style="font-weight:700;">${t.token}</div>
-                      <div style="font-size:11px;color:var(--muted);">${t.studentIdCode}</div>
-                    </div>
-                  `
-                  )
-                  .join("")
-              : `<p style="color:var(--muted);">No keys managed.</p>`
-          }
+          ${showSelected ? `
+            <div class="token-toolbar">
+              <input id="token-search" class="input" placeholder="Search student..." />
+              <select id="token-filter-course" class="input">
+                <option value="">All Courses</option>
+                ${Array.from(new Set(students.map((s) => s.course).filter(Boolean)))
+                  .map((c) => `<option value="${c}">${c}</option>`)
+                  .join("")}
+              </select>
+              <select id="token-filter-year" class="input">
+                <option value="">All Year Levels</option>
+                ${Array.from(new Set(subjectsData.map((s) => s.yearLevel).filter(Boolean)))
+                  .map((y) => `<option value="${y}">${y}</option>`)
+                  .join("")}
+              </select>
+              <select id="token-filter-semester" class="input">
+                <option value="">All Semesters</option>
+                ${Array.from(new Set(subjectsData.map((s) => s.semester).filter(Boolean)))
+                  .map((sem) => `<option value="${sem}">${sem}</option>`)
+                  .join("")}
+              </select>
+              <button class="btn ghost" id="token-select-all">Select All (Visible)</button>
+            </div>
+            <div id="token-student-list" class="token-list"></div>
+            <div class="pager" id="token-student-pager">
+              <button class="btn ghost" id="token-student-prev">Prev</button>
+              <span class="pager-info" id="token-student-page-info"></span>
+              <button class="btn ghost" id="token-student-next">Next</button>
+            </div>
+          ` : ""}
+          <div style="height:12px;"></div>
+          <button class="btn indigo" id="send-tokens" style="margin-top:6px;">Send Tokens to All Emails</button>
+        </div>
+        <div class="card">
+          <h3>Active Keys</h3>
+          <div class="token-toolbar" style="margin-top:12px;">
+            <input id="active-token-search" class="input" placeholder="Search active keys..." />
+            <select id="active-filter-course" class="input">
+              <option value="">All Courses</option>
+              ${Array.from(new Set(students.map((s) => s.course).filter(Boolean)))
+                .map((c) => `<option value="${c}">${c}</option>`)
+                .join("")}
+            </select>
+            <select id="active-filter-year" class="input">
+              <option value="">All Year Levels</option>
+              ${Array.from(new Set(subjectsData.map((s) => s.yearLevel).filter(Boolean)))
+                .map((y) => `<option value="${y}">${y}</option>`)
+                .join("")}
+            </select>
+            <select id="active-filter-semester" class="input">
+              <option value="">All Semesters</option>
+              ${Array.from(new Set(subjectsData.map((s) => s.semester).filter(Boolean)))
+                .map((sem) => `<option value="${sem}">${sem}</option>`)
+                .join("")}
+            </select>
+          </div>
+          <div id="active-token-list" style="margin-top:12px;display:grid;gap:10px;"></div>
+          <div class="pager" id="active-token-pager">
+            <button class="btn ghost" id="active-token-prev">Prev</button>
+            <span class="pager-info" id="active-token-page-info"></span>
+            <button class="btn ghost" id="active-token-next">Next</button>
+          </div>
         </div>
       </div>
-    </div>
-  `;
+    `;
 }
 
 function renderMailEditor() {
@@ -791,6 +814,7 @@ function renderMailEditor() {
         <strong>{Student_Name}</strong>, <strong>{Course}</strong>, <strong>{Student_ID}</strong>,
         <strong>{Email}</strong>, <strong>{Year_Level}</strong>, <strong>{Semester}</strong>,
         <strong>{Portal_Link}</strong>.
+        <div class="mail-portal">Portal link: <span id="mail-portal-link">Loading...</span></div>
       </div>
       <div class="mail-templates">
         <button class="btn ghost" data-template="default">Default</button>
@@ -1320,6 +1344,32 @@ function bindTokenActions() {
   const list = document.getElementById("token-student-list");
   const modeSelected = document.getElementById("mode-selected");
   const modeAll = document.getElementById("mode-all");
+  const selectAllBtn = document.getElementById("token-select-all");
+  const courseFilter = document.getElementById("token-filter-course");
+  const yearFilter = document.getElementById("token-filter-year");
+  const semesterFilter = document.getElementById("token-filter-semester");
+  const listPrev = document.getElementById("token-student-prev");
+  const listNext = document.getElementById("token-student-next");
+  const listPageInfo = document.getElementById("token-student-page-info");
+  const activeSearch = document.getElementById("active-token-search");
+  const activeCourseFilter = document.getElementById("active-filter-course");
+  const activeYearFilter = document.getElementById("active-filter-year");
+  const activeSemesterFilter = document.getElementById("active-filter-semester");
+  const activePrev = document.getElementById("active-token-prev");
+  const activeNext = document.getElementById("active-token-next");
+  const activePageInfo = document.getElementById("active-token-page-info");
+
+  const selectedIds = new Set();
+  let listPage = 1;
+  const listPageSize = 8;
+  let activePage = 1;
+  const activePageSize = 6;
+
+  const subjectMetaByName = subjectsData.reduce((acc, row) => {
+    if (!row.studentName) return acc;
+    if (!acc[row.studentName]) acc[row.studentName] = row;
+    return acc;
+  }, {});
 
   if (modeSelected) {
     modeSelected.onclick = () => {
@@ -1337,26 +1387,47 @@ function bindTokenActions() {
   const renderTokenList = (query = "") => {
     if (!list) return;
     const q = query.trim().toLowerCase();
-    const available = students.filter(
-      (s) =>
-        !tokens.some((t) => t.studentIdCode === s.idCode) &&
-        ([s.fullName, s.idCode].filter(Boolean).join(" ").toLowerCase().includes(q))
+    const available = students.filter((s) =>
+      ([s.fullName, s.idCode, s.email, s.course]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(q))
     );
-    if (!available.length) {
+    const filtered = available.filter((s) => {
+      if (courseFilter?.value && s.course !== courseFilter.value) return false;
+      const meta = subjectMetaByName[s.fullName] || {};
+      if (yearFilter?.value && meta.yearLevel !== yearFilter.value) return false;
+      if (semesterFilter?.value && meta.semester !== semesterFilter.value) return false;
+      return true;
+    });
+    const totalPages = Math.max(1, Math.ceil(filtered.length / listPageSize));
+    listPage = Math.min(listPage, totalPages);
+    const start = (listPage - 1) * listPageSize;
+    const slice = filtered.slice(start, start + listPageSize);
+    if (!filtered.length) {
       list.innerHTML = `<div style="color:var(--muted);font-size:12px;">No matches.</div>`;
+      if (listPageInfo) listPageInfo.textContent = `Page 1 of 1 · 0 records`;
+      if (listPrev) listPrev.disabled = true;
+      if (listNext) listNext.disabled = true;
       return;
     }
-    list.innerHTML = available
-      .slice(0, 15)
+    list.innerHTML = slice
       .map(
         (s) => `
-          <label style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-            <input type="checkbox" value="${s.idCode}" />
-            <span>${s.fullName} (${s.idCode})</span>
+          <label class="token-item">
+            <input type="checkbox" value="${s.idCode}" ${selectedIds.has(s.idCode) ? "checked" : ""} />
+            <span class="token-info">
+              <strong>${s.fullName}</strong>
+              <span class="token-meta">${s.idCode} · ${s.email || "No email"} · ${s.course || "No course"} · ${(subjectMetaByName[s.fullName]?.yearLevel) || "Year?"} · ${(subjectMetaByName[s.fullName]?.semester) || "Semester?"}</span>
+            </span>
           </label>
         `
       )
       .join("");
+    if (listPageInfo) listPageInfo.textContent = `Page ${listPage} of ${totalPages} · ${filtered.length} records`;
+    if (listPrev) listPrev.disabled = listPage <= 1;
+    if (listNext) listNext.disabled = listPage >= totalPages;
   };
   window._renderTokenList = renderTokenList;
 
@@ -1376,13 +1447,11 @@ function bindTokenActions() {
       sendBtn.disabled = true;
       sendBtn.textContent = "Sending...";
       try {
-        const selectedIds =
+        const selectedIdsList =
           tokenMode === "selected"
-            ? Array.from(
-                document.querySelectorAll("#token-student-list input:checked")
-              ).map((el) => el.value)
+            ? Array.from(selectedIds)
             : [];
-        if (tokenMode === "selected" && selectedIds.length === 0) {
+        if (tokenMode === "selected" && selectedIdsList.length === 0) {
           Swal.fire({
             icon: "warning",
             title: "No students selected",
@@ -1395,7 +1464,7 @@ function bindTokenActions() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             mode: tokenMode,
-            student_ids: selectedIds,
+            student_ids: selectedIdsList,
           }),
         });
         const data = await resp.json().catch(() => ({}));
@@ -1405,6 +1474,11 @@ function bindTokenActions() {
           title: "Emails sent",
           text: data?.message || "Tokens were sent to all student emails.",
         });
+        if (data?.portalLink) {
+          showToast("info", `Portal link: ${data.portalLink}`);
+        } else {
+          showToast("warning", "Portal link is not set in server env.");
+        }
       } catch (err) {
         Swal.fire({
           icon: "error",
@@ -1417,6 +1491,153 @@ function bindTokenActions() {
       }
     };
   }
+
+  if (list) {
+    list.addEventListener("change", (e) => {
+      const target = e.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      if (target.type !== "checkbox") return;
+      if (target.checked) selectedIds.add(target.value);
+      else selectedIds.delete(target.value);
+    });
+  }
+
+  if (selectAllBtn) {
+    selectAllBtn.onclick = () => {
+      if (!list) return;
+      list.querySelectorAll("input[type=checkbox]").forEach((cb) => {
+        cb.checked = true;
+        selectedIds.add(cb.value);
+      });
+    };
+  }
+
+  const onListFilter = () => {
+    listPage = 1;
+    renderTokenList(search?.value || "");
+  };
+  search && search.addEventListener("input", onListFilter);
+  courseFilter && courseFilter.addEventListener("change", onListFilter);
+  yearFilter && yearFilter.addEventListener("change", onListFilter);
+  semesterFilter && semesterFilter.addEventListener("change", onListFilter);
+  listPrev && listPrev.addEventListener("click", () => {
+    listPage -= 1;
+    renderTokenList(search?.value || "");
+  });
+  listNext && listNext.addEventListener("click", () => {
+    listPage += 1;
+    renderTokenList(search?.value || "");
+  });
+  renderTokenList();
+
+  const getActiveTokenRows = () => {
+    const q = (activeSearch?.value || "").trim().toLowerCase();
+    const rows = tokens
+      .map((t) => {
+        const student = students.find((s) => s.idCode === t.studentIdCode) || {};
+        const meta = subjectMetaByName[student.fullName] || {};
+        return {
+          token: t.token,
+          studentId: t.studentIdCode,
+          name: student.fullName || "",
+          email: student.email || "",
+          course: student.course || "",
+          yearLevel: meta.yearLevel || "",
+          semester: meta.semester || "",
+        };
+      })
+      .filter((r) =>
+        [r.token, r.studentId, r.name, r.email, r.course]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(q)
+      )
+      .filter((r) => {
+        if (activeCourseFilter?.value && r.course !== activeCourseFilter.value) return false;
+        if (activeYearFilter?.value && r.yearLevel !== activeYearFilter.value) return false;
+        if (activeSemesterFilter?.value && r.semester !== activeSemesterFilter.value) return false;
+        return true;
+      });
+    return rows;
+  };
+
+  const renderActiveKeys = () => {
+    const container = document.getElementById("active-token-list");
+    if (!container) return;
+    const rows = getActiveTokenRows();
+    const totalPages = Math.max(1, Math.ceil(rows.length / activePageSize));
+    activePage = Math.min(activePage, totalPages);
+    const start = (activePage - 1) * activePageSize;
+    const slice = rows.slice(start, start + activePageSize);
+    if (!rows.length) {
+      container.innerHTML = `<p style="color:var(--muted);">No keys managed.</p>`;
+    } else {
+      container.innerHTML = slice
+        .map(
+          (r) => `
+          <div class="glass token-card" data-student-id="${r.studentId}">
+            <div class="token-main">
+              <div class="token-value">${r.token}</div>
+              <div class="token-sub">${r.studentId}</div>
+              <div class="token-meta">${r.name} · ${r.email || "No email"} · ${r.course || "No course"} · ${r.yearLevel || "Year?"} · ${r.semester || "Semester?"}</div>
+            </div>
+            <button class="btn ghost token-reroll" data-student-id="${r.studentId}">Reroll &amp; Send</button>
+          </div>
+        `
+        )
+        .join("");
+    }
+    if (activePageInfo) activePageInfo.textContent = `Page ${activePage} of ${totalPages} · ${rows.length} records`;
+    if (activePrev) activePrev.disabled = activePage <= 1;
+    if (activeNext) activeNext.disabled = activePage >= totalPages;
+  };
+
+  const onActiveFilter = () => {
+    activePage = 1;
+    renderActiveKeys();
+  };
+  activeSearch && activeSearch.addEventListener("input", onActiveFilter);
+  activeCourseFilter && activeCourseFilter.addEventListener("change", onActiveFilter);
+  activeYearFilter && activeYearFilter.addEventListener("change", onActiveFilter);
+  activeSemesterFilter && activeSemesterFilter.addEventListener("change", onActiveFilter);
+  activePrev && activePrev.addEventListener("click", () => {
+    activePage -= 1;
+    renderActiveKeys();
+  });
+  activeNext && activeNext.addEventListener("click", () => {
+    activePage += 1;
+    renderActiveKeys();
+  });
+  renderActiveKeys();
+
+  document.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".token-reroll");
+    if (!btn) return;
+    const studentId = btn.dataset.studentId;
+    if (!studentId) return;
+    btn.disabled = true;
+    btn.textContent = "Rerolling...";
+    try {
+      const resp = await fetch("/.netlify/functions/reroll-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ student_id: studentId }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.error || "Reroll failed");
+      const existing = tokens.find((t) => t.studentIdCode === studentId);
+      if (existing && data?.token) existing.token = data.token;
+      showToast("success", "Token re-rolled and sent.");
+      renderActiveKeys();
+    } catch (err) {
+      console.error("reroll failed", err);
+      showToast("error", err?.message || "Could not reroll token.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Reroll & Send";
+    }
+  });
 }
 
 let importCache = {
@@ -1856,6 +2077,7 @@ function initMailEditor() {
   const draftBtn = document.getElementById("mail-save-draft");
   const finalBtn = document.getElementById("mail-save-final");
   const templateButtons = document.querySelectorAll("[data-template]");
+  const portalEl = document.getElementById("mail-portal-link");
 
   if (mailEditor && mailEditor.root && !editorEl.contains(mailEditor.root)) {
     mailEditor = null;
@@ -1997,6 +2219,18 @@ function initMailEditor() {
       saveDraft();
     });
   });
+
+  if (portalEl && portalEl.dataset.mailBound !== "true") {
+    portalEl.dataset.mailBound = "true";
+    fetch("/.netlify/functions/get-portal-link")
+      .then((r) => r.json())
+      .then((data) => {
+        portalEl.textContent = data?.portalLink || "Not set";
+      })
+      .catch(() => {
+        portalEl.textContent = "Not set";
+      });
+  }
 }
 
 async function init() {

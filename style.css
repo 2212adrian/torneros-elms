@@ -668,6 +668,24 @@ select.input {
 
 .import-modal {
   overflow: visible;
+  background:
+    radial-gradient(600px 200px at -10% -10%, rgba(99, 102, 241, 0.25), transparent 55%),
+    radial-gradient(500px 200px at 110% 0%, rgba(14, 165, 233, 0.22), transparent 60%),
+    rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  box-shadow:
+    0 30px 70px -40px rgba(15, 23, 42, 0.7),
+    0 18px 32px -22px rgba(59, 130, 246, 0.35);
+  backdrop-filter: blur(10px);
+}
+
+.import-modal .modal-body h3 {
+  font-size: 20px;
+  letter-spacing: 0.02em;
+}
+
+.import-modal .modal-body > p {
+  max-width: 520px;
 }
 
 .import-drop {
@@ -677,16 +695,38 @@ select.input {
   border-radius: 24px;
   display: grid;
   place-items: center;
-  background: #eef2ff;
+  background:
+    linear-gradient(135deg, rgba(224, 231, 255, 0.9), rgba(219, 234, 254, 0.9));
   transition: all 0.35s ease;
 }
 
 .import-drop input[type="file"] {
-  background: white;
-  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 12px 14px;
   border-radius: 16px;
-  border: 1px solid #cbd5f5;
+  border: 1px solid rgba(148, 163, 184, 0.6);
   width: 100%;
+  font-weight: 600;
+  color: #0f172a;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+}
+
+.import-drop input[type="file"]::file-selector-button {
+  margin-right: 10px;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #4f46e5, #6366f1);
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 18px -12px rgba(79, 70, 229, 0.7);
+}
+
+.import-drop input[type="file"]::file-selector-button:hover {
+  filter: brightness(1.05);
+}
 }
 
 .import-panel {
@@ -700,8 +740,29 @@ select.input {
 .import-ready .import-drop {
   min-height: 72px;
   padding: 8px;
-  background: #e0e7ff;
+  background: rgba(224, 231, 255, 0.85);
   align-items: start;
+}
+
+.dark-mode .import-modal {
+  background:
+    radial-gradient(600px 200px at -10% -10%, rgba(99, 102, 241, 0.2), transparent 55%),
+    radial-gradient(500px 200px at 110% 0%, rgba(14, 165, 233, 0.18), transparent 60%),
+    rgba(15, 23, 42, 0.9);
+  border-color: #1f2937;
+}
+
+.dark-mode .import-drop {
+  border-color: rgba(148, 163, 184, 0.4);
+  background:
+    linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.9));
+}
+
+.dark-mode .import-drop input[type="file"] {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: #1f2937;
+  color: #e2e8f0;
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.12);
 }
 
 .import-ready .import-panel {
@@ -1036,6 +1097,90 @@ select.input {
 .drawer-footer {
   margin-top: auto;
 }
+
+.token-toolbar {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.token-item {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.token-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px -16px rgba(59, 130, 246, 0.6);
+  background: rgba(224, 231, 255, 0.7);
+}
+
+.token-info strong {
+  display: block;
+  font-size: 13px;
+}
+
+.token-meta {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.token-card {
+  padding: 14px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.token-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 20px -18px rgba(59, 130, 246, 0.5);
+}
+
+.token-main {
+  display: grid;
+  gap: 4px;
+}
+
+.token-value {
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.token-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+@media (max-width: 900px) {
+  .token-toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dark-mode .token-item {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: #1f2937;
+}
+
+.dark-mode .token-item:hover {
+  background: rgba(59, 130, 246, 0.18);
+}
 .more-menu {
   position: fixed;
   right: 12px;
@@ -1101,6 +1246,13 @@ select.input {
 .mail-editor {
   display: grid;
   gap: 14px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.mail-editor .section {
+  min-width: 0;
 }
 
 .mail-templates {
@@ -1176,8 +1328,12 @@ select.input {
 
 @media (max-width: 900px) {
   .mail-actions {
-    grid-template-columns: auto auto;
-    justify-content: start;
+    grid-template-columns: 1fr;
+    justify-content: stretch;
+  }
+  .mail-status {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 
@@ -1189,6 +1345,32 @@ select.input {
   font-size: 12px;
   font-weight: 600;
   color: #0f172a;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.mail-note strong {
+  display: inline-block;
+  margin: 2px 4px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+  font-size: 11px;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.mail-portal {
+  margin-top: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #1e3a8a;
+  overflow-wrap: anywhere;
+}
+
+.mail-portal span {
+  color: #0f172a;
 }
 
 .dark-mode .mail-note {
@@ -1197,11 +1379,27 @@ select.input {
   color: #e2e8f0;
 }
 
+.dark-mode .mail-note strong {
+  background: rgba(148, 163, 184, 0.18);
+  color: #e2e8f0;
+}
+
+.dark-mode .mail-portal {
+  color: #93c5fd;
+}
+
+.dark-mode .mail-portal span {
+  color: #e2e8f0;
+}
+
 .quill-shell {
   border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.35);
   overflow: hidden;
   background: white;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .dark-mode .quill-shell {
@@ -1213,6 +1411,15 @@ select.input {
   border: none;
   border-bottom: 1px solid rgba(148, 163, 184, 0.35);
   background: rgba(248, 250, 252, 0.9);
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+
+.ql-toolbar.ql-snow .ql-formats {
+  margin-right: 0;
 }
 
 .dark-mode .ql-toolbar.ql-snow {
@@ -1224,6 +1431,8 @@ select.input {
   border: none;
   min-height: 220px;
   font-family: "Space Grotesk", sans-serif;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .ql-editor {
